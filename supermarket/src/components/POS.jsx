@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function POS({ products, customers, onCheckout }) {
+export default function POS({ products = [], customers = [], onCheckout }) {
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState([]);
   const [phoneSearch, setPhoneSearch] = useState('');
@@ -8,10 +8,16 @@ export default function POS({ products, customers, onCheckout }) {
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
 
+  // Search by Name, Barcode, OR SKU
   const filteredProducts = products.filter(p => {
-    const name = p.name?.toLowerCase() ?? '';
-    const barcode = p.barcode ?? '';
-    return name.includes(search.toLowerCase()) || barcode.includes(search);
+    const q = search.toLowerCase().trim();
+    if (!q) return true;
+
+    const name = (p.name || '').toLowerCase();
+    const barcode = (p.barcode || '').toLowerCase();
+    const sku = (p.sku || '').toLowerCase();
+
+    return name.includes(q) || barcode.includes(q) || sku.includes(q);
   });
 
   const addToCart = (product) => {
@@ -34,7 +40,14 @@ export default function POS({ products, customers, onCheckout }) {
   };
 
   const findCustomer = () => {
-    const cust = customers.find(c => c.phone === phoneSearch || c.loyalty_id === phoneSearch);
+    const query = phoneSearch.trim();
+    if (!query) return;
+
+    const cust = customers.find(c => 
+      c.phone_number === query || 
+      String(c.id) === query
+    );
+
     if (cust) {
       setSelectedCustomer(cust);
     } else {
@@ -42,7 +55,7 @@ export default function POS({ products, customers, onCheckout }) {
     }
   };
 
-  const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const total = cart.reduce((sum, item) => sum + ((item.price || 0) * item.quantity), 0);
   const finalTotal = Math.max(0, total - pointsToRedeem);
 
   const handleCheckoutSubmit = async () => {
@@ -50,7 +63,7 @@ export default function POS({ products, customers, onCheckout }) {
     try {
       await onCheckout({
         cart,
-        customerId: selectedCustomer?.id,
+        customerId: selectedCustomer?.id || null,
         pointsToRedeem,
         paymentMethod
       });
@@ -71,19 +84,23 @@ export default function POS({ products, customers, onCheckout }) {
         <h2>Items Lookup</h2>
         <input 
           type="text" 
-          placeholder="Scan barcode or search product..." 
+          placeholder="Scan barcode, SKU, or search product name..." 
           className="search-bar"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
         <div className="product-grid">
-          {filteredProducts.map(p => (
-            <div key={p.id} className="product-card" onClick={() => addToCart(p)}>
-              <h4>{p.name}</h4>
-              <p>₱{p.price.toFixed(2)}</p>
-              <small>Stock: {p.stock_quantity}</small>
-            </div>
-          ))}
+          {filteredProducts.length === 0 ? (
+            <p className="no-products">No products found</p>
+          ) : (
+            filteredProducts.map(p => (
+              <div key={p.id} className="product-card" onClick={() => addToCart(p)}>
+                <h4>{p.name}</h4>
+                <p>₱{(p.price || 0).toFixed(2)}</p>
+                <small>Stock: {p.stock_quantity}</small>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -94,7 +111,7 @@ export default function POS({ products, customers, onCheckout }) {
         {/* Customer Lookup */}
         <div className="customer-panel">
           <input 
-            placeholder="Phone / Loyalty ID" 
+            placeholder="Phone Number / Customer ID" 
             value={phoneSearch} 
             onChange={e => setPhoneSearch(e.target.value)} 
           />
@@ -103,8 +120,8 @@ export default function POS({ products, customers, onCheckout }) {
 
         {selectedCustomer && (
           <div className="member-info">
-            👤 <strong>{selectedCustomer.name}</strong> | Points: {selectedCustomer.points_balance}
-            {selectedCustomer.points_balance > 0 && (
+            👤 <strong>{selectedCustomer.name}</strong> | Points: {selectedCustomer.points_balance || 0}
+            {(selectedCustomer.points_balance || 0) > 0 && (
               <div className="points-redeem">
                 <label>Redeem Points (₱1/pt): </label>
                 <input 
@@ -121,18 +138,22 @@ export default function POS({ products, customers, onCheckout }) {
 
         {/* Cart Contents */}
         <div className="cart-list">
-          {cart.length === 0 ? <p className="empty-cart">Basket is empty</p> : cart.map(item => (
-            <div key={item.id} className="cart-item">
-              <div>
-                <strong>{item.name}</strong>
-                <small> x{item.quantity}</small>
+          {cart.length === 0 ? (
+            <p className="empty-cart">Basket is empty</p>
+          ) : (
+            cart.map(item => (
+              <div key={item.id} className="cart-item">
+                <div>
+                  <strong>{item.name}</strong>
+                  <small> x{item.quantity}</small>
+                </div>
+                <div>
+                  <span>₱{((item.price || 0) * item.quantity).toFixed(2)} </span>
+                  <button className="btn-sm btn-danger" onClick={() => removeFromCart(item.id)}>×</button>
+                </div>
               </div>
-              <div>
-                <span>₱{(item.price * item.quantity).toFixed(2)} </span>
-                <button className="btn-sm btn-danger" onClick={() => removeFromCart(item.id)}>×</button>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
         {/* Summary & Actions */}

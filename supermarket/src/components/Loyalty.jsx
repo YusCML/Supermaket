@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function Loyalty({ customers, logs }) {
+export default function Loyalty({ customers = [], logs = [], onRefresh }) {
   return (
     <div className="tab-content">
       <h2>Loyalty & Rewards Center</h2>

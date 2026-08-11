@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import Navbar from './components/Navbar';
 import POS from './components/POS';
 import Inventory from './components/Inventory';
 import Loyalty from './components/Loyalty';
+import Navbar from './components/Navbar';
 import { api } from './components/services/api';
 import './App.css';
 
@@ -10,86 +10,68 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('pos');
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
-  const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const refreshData = async () => {
+  const loadData = async () => {
     try {
-      const [prodData, custData, logData] = await Promise.all([
+      setLoading(true);
+      const [prodData, custData] = await Promise.all([
         api.getProducts(),
-        api.getCustomers(),
-        api.getLoyaltyLogs()
+        api.getCustomers()
       ]);
-      setProducts(prodData);
-      setCustomers(custData);
-      setLogs(logData);
+      setProducts(prodData || []);
+      setCustomers(custData || []);
     } catch (err) {
-      console.error('Error fetching data from Supabase:', err.message);
+      console.error('Error loading Supabase data:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    refreshData();
+    loadData();
   }, []);
 
-  const handleUpdateStock = async (id, delta) => {
-    const product = products.find(p => p.id === id);
-    if (!product) return;
-    try {
-      await api.updateStock(id, product.stock_quantity, delta);
-      await refreshData();
-    } catch (err) {
-      alert(`Error updating stock: ${err.message}`);
-    }
+  const handleCheckout = async (checkoutData) => {
+    await api.processCheckout(checkoutData);
+    await loadData();
   };
 
-  const handleAddProduct = async (product) => {
-    try {
-      await api.addProduct(product);
-      await refreshData();
-    } catch (err) {
-      alert(`Error adding product: ${err.message}`);
-    }
+  const handleAddProduct = async (newProduct) => {
+    await api.addProduct(newProduct);
+    await loadData();
   };
-
-  const handleCheckout = async (payload) => {
-    try {
-      await api.processCheckout(payload);
-      await refreshData();
-    } catch (err) {
-      throw err;
-    }
-  };
-
-  if (loading) {
-    return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading SuperMarket Express...</div>;
-  }
 
   return (
     <div className="app-container">
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
-      <main className="main-content">
-        {activeTab === 'pos' && (
-          <POS 
-            products={products} 
-            customers={customers} 
-            onCheckout={handleCheckout} 
-          />
-        )}
-        {activeTab === 'inventory' && (
-          <Inventory 
-            products={products} 
-            onUpdateStock={handleUpdateStock} 
-            onAddProduct={handleAddProduct} 
-          />
-        )}
-        {activeTab === 'loyalty' && (
-          <Loyalty 
-            customers={customers} 
-            logs={logs} 
-          />
+      
+      <main className="content">
+        {loading ? (
+          <div style={{ padding: '20px', textAlign: 'center' }}>Loading store data...</div>
+        ) : (
+          <>
+            {activeTab === 'pos' && (
+              <POS 
+                products={products} 
+                customers={customers} 
+                onCheckout={handleCheckout} 
+              />
+            )}
+            {activeTab === 'inventory' && (
+              <Inventory 
+                products={products} 
+                onAddProduct={handleAddProduct}
+                onRefresh={loadData}
+              />
+            )}
+            {activeTab === 'loyalty' && (
+              <Loyalty 
+              customers={customers || []} 
+              onRefresh={loadData} 
+            />
+          )}
+          </>
         )}
       </main>
     </div>
