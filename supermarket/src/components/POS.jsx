@@ -8,9 +8,11 @@ export default function POS({ products, customers, onCheckout }) {
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('Cash');
 
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.includes(search)
-  );
+  const filteredProducts = products.filter(p => {
+    const name = p.name?.toLowerCase() ?? '';
+    const barcode = p.barcode ?? '';
+    return name.includes(search.toLowerCase()) || barcode.includes(search);
+  });
 
   const addToCart = (product) => {
     if (product.stock_quantity <= 0) return alert('Item is out of stock!');

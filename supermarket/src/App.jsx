@@ -64,7 +64,7 @@ export default function App() {
   };
 
   if (loading) {
-    return <div style={{ padding: '2rem', textStyle: 'center' }}>Loading SuperMarket Express...</div>;
+    return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading SuperMarket Express...</div>;
   }
 
   return (
