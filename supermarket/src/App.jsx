@@ -1,39 +1,71 @@
-'use client';
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import POS from './components/POS';
 import Inventory from './components/Inventory';
 import Loyalty from './components/Loyalty';
-import { api } from './components/services/mockApi';
+import { api } from './services/api';
 import './App.css';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('pos');
-  const [products, setProducts] = useState(api.getProducts());
-  const [customers, setCustomers] = useState(api.getCustomers());
-  const [logs, setLogs] = useState(api.getLoyaltyLogs());
+  const [products, setProducts] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const refreshData = () => {
-    setProducts(api.getProducts());
-    setCustomers(api.getCustomers());
-    setLogs(api.getLoyaltyLogs());
+  const refreshData = async () => {
+    try {
+      const [prodData, custData, logData] = await Promise.all([
+        api.getProducts(),
+        api.getCustomers(),
+        api.getLoyaltyLogs()
+      ]);
+      setProducts(prodData);
+      setCustomers(custData);
+      setLogs(logData);
+    } catch (err) {
+      console.error('Error fetching data from Supabase:', err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleUpdateStock = (id, delta) => {
-    api.updateStock(id, delta);
+  useEffect(() => {
     refreshData();
+  }, []);
+
+  const handleUpdateStock = async (id, delta) => {
+    const product = products.find(p => p.id === id);
+    if (!product) return;
+    try {
+      await api.updateStock(id, product.stock_quantity, delta);
+      await refreshData();
+    } catch (err) {
+      alert(`Error updating stock: ${err.message}`);
+    }
   };
 
-  const handleAddProduct = (product) => {
-    api.addProduct(product);
-    refreshData();
+  const handleAddProduct = async (product) => {
+    try {
+      await api.addProduct(product);
+      await refreshData();
+    } catch (err) {
+      alert(`Error adding product: ${err.message}`);
+    }
   };
 
-  const handleCheckout = (payload) => {
-    api.processCheckout(payload);
-    refreshData();
+  const handleCheckout = async (payload) => {
+    try {
+      await api.processCheckout(payload);
+      await refreshData();
+    } catch (err) {
+      throw err;
+    }
   };
+
+  if (loading) {
+    return <div style={{ padding: '2rem', textStyle: 'center' }}>Loading SuperMarket Express...</div>;
+  }
 
   return (
     <div className="app-container">
