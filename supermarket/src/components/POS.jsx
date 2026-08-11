@@ -43,10 +43,10 @@ export default function POS({ products, customers, onCheckout }) {
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const finalTotal = Math.max(0, total - pointsToRedeem);
 
-  const handleCheckoutSubmit = () => {
+  const handleCheckoutSubmit = async () => {
     if (cart.length === 0) return alert('Cart is empty!');
     try {
-      onCheckout({
+      await onCheckout({
         cart,
         customerId: selectedCustomer?.id,
         pointsToRedeem,
@@ -58,7 +58,7 @@ export default function POS({ products, customers, onCheckout }) {
       setPointsToRedeem(0);
       setPhoneSearch('');
     } catch (err) {
-      alert(err.message);
+      alert(err?.message || 'Checkout failed');
     }
   };
 

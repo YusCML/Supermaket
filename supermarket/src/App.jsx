@@ -3,7 +3,7 @@ import Navbar from './components/Navbar';
 import POS from './components/POS';
 import Inventory from './components/Inventory';
 import Loyalty from './components/Loyalty';
-import { api } from './services/api';
+import { api } from './components/services/api';
 import './App.css';
 
 export default function App() {
