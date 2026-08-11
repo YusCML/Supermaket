@@ -16,14 +16,20 @@ export default function Loyalty({ customers = [], logs = [], onRefresh }) {
           </tr>
         </thead>
         <tbody>
-          {customers.map(c => (
-            <tr key={c.id}>
-              <td>{c.name}</td>
-              <td>{c.phone}</td>
-              <td>{c.loyalty_id}</td>
-              <td><strong>{c.points_balance} pts</strong></td>
-            </tr>
-          ))}
+          {customers.length === 0 ? (
+            <tr><td colSpan="4">No members found.</td></tr>
+          ) : (
+            customers.map(c => (
+              <tr key={c.id}>
+                <td>{c.name || c.full_name || 'N/A'}</td>
+                {/* Fallbacks for phone field name variations */}
+                <td>{c.phone || c.phone_number || c.mobile || 'N/A'}</td>
+                {/* Fallbacks for loyalty ID field name variations */}
+                <td>{c.loyalty_id || c.card_number || c.member_id || `#${c.id}`}</td>
+                <td><strong>{c.points_balance ?? c.points ?? 0} pts</strong></td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
 
@@ -44,7 +50,7 @@ export default function Loyalty({ customers = [], logs = [], onRefresh }) {
           ) : (
             logs.map(log => (
               <tr key={log.id}>
-                <td>{new Date(log.created_at).toLocaleString()}</td>
+                <td>{log.created_at ? new Date(log.created_at).toLocaleString() : 'N/A'}</td>
                 <td>Customer #{log.customer_id}</td>
                 <td>Order #{log.order_id}</td>
                 <td>

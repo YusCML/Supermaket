@@ -10,17 +10,20 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('pos');
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [prodData, custData] = await Promise.all([
+      const [prodData, custData, logData] = await Promise.all([
         api.getProducts(),
-        api.getCustomers()
+        api.getCustomers(),
+        api.getLoyaltyLogs()
       ]);
       setProducts(prodData || []);
       setCustomers(custData || []);
+      setLogs(logData || []);
     } catch (err) {
       console.error('Error loading Supabase data:', err);
     } finally {
@@ -67,10 +70,11 @@ export default function App() {
             )}
             {activeTab === 'loyalty' && (
               <Loyalty 
-              customers={customers || []} 
-              onRefresh={loadData} 
-            />
-          )}
+                customers={customers || []} 
+                logs={logs || []}
+                onRefresh={loadData} 
+              />
+            )}
           </>
         )}
       </main>
