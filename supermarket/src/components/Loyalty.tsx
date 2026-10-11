@@ -1,6 +1,12 @@
-import React from 'react';
+import type { Customer, LoyaltyLog } from '../types/app';
 
-export default function Loyalty({ customers = [], logs = [], onRefresh }) {
+interface LoyaltyProps {
+  customers?: Customer[];
+  logs?: LoyaltyLog[];
+  onRefresh?: () => void;
+}
+
+export default function Loyalty({ customers = [], logs = [] }: LoyaltyProps) {
   return (
     <div className="tab-content">
       <h2>Loyalty & Rewards Center</h2>
@@ -17,16 +23,14 @@ export default function Loyalty({ customers = [], logs = [], onRefresh }) {
         </thead>
         <tbody>
           {customers.length === 0 ? (
-            <tr><td colSpan="4">No members found.</td></tr>
+            <tr><td colSpan={4}>No members found.</td></tr>
           ) : (
-            customers.map(c => (
+            customers.map((c) => (
               <tr key={c.id}>
-                <td>{c.name || c.full_name || 'N/A'}</td>
-                {/* Fallbacks for phone field name variations */}
-                <td>{c.phone || c.phone_number || c.mobile || 'N/A'}</td>
-                {/* Fallbacks for loyalty ID field name variations */}
-                <td>{c.loyalty_id || c.card_number || c.member_id || `#${c.id}`}</td>
-                <td><strong>{c.points_balance ?? c.points ?? 0} pts</strong></td>
+                <td>{c.name || 'N/A'}</td>
+                <td>{c.phone || 'N/A'}</td>
+                <td>{c.loyalty_id || `#${c.id}`}</td>
+                <td><strong>{c.points_balance ?? 0} pts</strong></td>
               </tr>
             ))
           )}
@@ -46,13 +50,13 @@ export default function Loyalty({ customers = [], logs = [], onRefresh }) {
         </thead>
         <tbody>
           {logs.length === 0 ? (
-            <tr><td colSpan="5">No transactions recorded yet.</td></tr>
+            <tr><td colSpan={5}>No transactions recorded yet.</td></tr>
           ) : (
-            logs.map(log => (
+            logs.map((log) => (
               <tr key={log.id}>
                 <td>{log.created_at ? new Date(log.created_at).toLocaleString() : 'N/A'}</td>
                 <td>Customer #{log.customer_id}</td>
-                <td>Order #{log.order_id}</td>
+                <td>Order #{log.order_id ?? '—'}</td>
                 <td>
                   <span className={`badge ${log.type === 'EARNED' ? 'badge-ok' : 'badge-warn'}`}>
                     {log.type}
