@@ -1,89 +1,25 @@
-﻿import { useState, useEffect } from 'react';
-import POS from './components/POS';
-import Inventory from './components/Inventory';
-import Loyalty from './components/Loyalty';
-import Navbar, { type Tab } from './components/Navbar';
-import Login from './components/Login';
-import { api } from './lib/api';
-import { useAuth } from './contexts/AuthContext';
-import type { Product, Customer, LoyaltyLog, CheckoutPayload, NewProductInput } from './types/app';
-import './App.css';
+﻿import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import LandingPage from './pages/LandingPage';
+import LoginPage from './pages/LoginPage';
+import AppPage from './pages/AppPage';
+import ProtectedRoute from './components/ProtectedRoute';
 
 export default function App() {
-  const { user, loading: authLoading, signOut } = useAuth();
-
-  const [activeTab, setActiveTab] = useState<Tab>('pos');
-  const [products, setProducts] = useState<Product[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [logs, setLogs] = useState<LoyaltyLog[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [prodData, custData, logData] = await Promise.all([
-        api.getProducts(),
-        api.getCustomers(),
-        api.getLoyaltyLogs(),
-      ]);
-      setProducts(prodData);
-      setCustomers(custData);
-      setLogs(logData);
-    } catch (err) {
-      console.error('Error loading Supabase data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (user) loadData();
-  }, [user]);
-
-  const handleCheckout = async (payload: CheckoutPayload) => {
-    await api.processCheckout(payload);
-    await loadData();
-  };
-
-  const handleAddProduct = async (product: NewProductInput) => {
-    await api.addProduct(product);
-    await loadData();
-  };
-
-  if (authLoading) {
-    return <div style={{ padding: '2rem', textAlign: 'center' }}>Checking session…</div>;
-  }
-
-  if (!user) return <Login />;
-
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <span className="user-info">
-          Signed in as <strong>{user.email}</strong>
-        </span>
-        <button className="signout-btn" onClick={signOut}>Sign out</button>
-      </header>
-
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
-
-      <main className="content">
-        {loading ? (
-          <div style={{ padding: '20px', textAlign: 'center' }}>Loading store data…</div>
-        ) : (
-          <>
-            {activeTab === 'pos' && (
-              <POS products={products} customers={customers} onCheckout={handleCheckout} />
-            )}
-            {activeTab === 'inventory' && (
-              <Inventory products={products} onAddProduct={handleAddProduct} onRefresh={loadData} />
-            )}
-            {activeTab === 'loyalty' && (
-              <Loyalty customers={customers} logs={logs} onRefresh={loadData} />
-            )}
-          </>
-        )}
-      </main>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/app"
+          element={
+            <ProtectedRoute>
+              <AppPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
