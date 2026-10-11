@@ -1,11 +1,12 @@
-* {
+.app-container,
+.app-container *,
+.login-page,
+.login-page * {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-body {
+.app-container {
   background: #f4f6f8;
   color: #333;
 }
