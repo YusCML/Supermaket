@@ -1,6 +1,15 @@
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function LandingPage() {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!loading && user) navigate('/app', { replace: true });
+  }, [user, loading, navigate]);
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Nav */}
@@ -27,7 +36,7 @@ export default function LandingPage() {
 
       {/* Hero */}
       <header className="mx-auto max-w-3xl px-6 pt-24 pb-16 text-center">
-        <h1 className="text-5xl font-extrabold tracking-tight leading-tight bg-gradient-to-br from-white to-blue-300 bg-clip-text text-transparent">
+        <h1 className="text-5xl font-extrabold tracking-tight leading-tight bg-linear-to-br from-white to-blue-300 bg-clip-text text-transparent">
           Run your store.
           <br />
           Not your spreadsheet.
