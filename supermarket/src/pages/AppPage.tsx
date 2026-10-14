@@ -15,7 +15,7 @@ import type {
 import '../App.css';
 
 export default function AppPage() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isAdmin, roleLoading } = useAuth();
 
   const [activeTab, setActiveTab] = useState<Tab>('pos');
   const [products, setProducts] = useState<Product[]>([]);
@@ -45,6 +45,14 @@ export default function AppPage() {
     if (user) loadData();
   }, [user]);
 
+  // If the user loses admin rights (or was never admin) and is on an admin tab,
+  // kick them back to POS.
+  useEffect(() => {
+    if (!roleLoading && !isAdmin && activeTab !== 'pos') {
+      setActiveTab('pos');
+    }
+  }, [isAdmin, roleLoading, activeTab]);
+
   const handleCheckout = async (payload: CheckoutPayload) => {
     await api.processCheckout(payload);
     await loadData();
@@ -60,6 +68,7 @@ export default function AppPage() {
       <header className="app-header">
         <span className="user-info">
           Signed in as <strong>{user?.email}</strong>
+          {isAdmin && <span className="admin-badge">Admin</span>}
         </span>
         <button className="signout-btn" onClick={signOut}>
           Sign out
@@ -82,14 +91,14 @@ export default function AppPage() {
                 onCheckout={handleCheckout}
               />
             )}
-            {activeTab === 'inventory' && (
+            {activeTab === 'inventory' && isAdmin && (
               <Inventory
                 products={products}
                 onAddProduct={handleAddProduct}
                 onRefresh={loadData}
               />
             )}
-            {activeTab === 'loyalty' && (
+            {activeTab === 'loyalty' && isAdmin && (
               <Loyalty
                 customers={customers}
                 logs={logs}
