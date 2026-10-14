@@ -39,21 +39,227 @@ export type Database = {
   }
   public: {
     Tables: {
-      suppliers: {
+      customers: {
         Row: {
-          contact_email: string | null
+          created_at: string | null
           id: number
+          loyalty_id: string | null
           name: string
+          phone: string
+          points_balance: number
         }
         Insert: {
-          contact_email?: string | null
+          created_at?: string | null
           id?: number
+          loyalty_id?: string | null
           name: string
+          phone: string
+          points_balance?: number
         }
         Update: {
-          contact_email?: string | null
+          created_at?: string | null
+          id?: number
+          loyalty_id?: string | null
+          name?: string
+          phone?: string
+          points_balance?: number
+        }
+        Relationships: []
+      }
+      loyalty_logs: {
+        Row: {
+          created_at: string | null
+          customer_id: number | null
+          id: number
+          order_id: number | null
+          points_changed: number
+          reason: string
+          type: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          customer_id?: number | null
+          id?: number
+          order_id?: number | null
+          points_changed: number
+          reason: string
+          type?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          customer_id?: number | null
+          id?: number
+          order_id?: number | null
+          points_changed?: number
+          reason?: string
+          type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loyalty_log_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_log_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_items: {
+        Row: {
+          id: number
+          order_id: number | null
+          price: number | null
+          product_id: number | null
+          quantity: number
+          subtotal: number
+          unit_price: number
+        }
+        Insert: {
+          id?: number
+          order_id?: number | null
+          price?: number | null
+          product_id?: number | null
+          quantity: number
+          subtotal: number
+          unit_price: number
+        }
+        Update: {
+          id?: number
+          order_id?: number | null
+          price?: number | null
+          product_id?: number | null
+          quantity?: number
+          subtotal?: number
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          created_at: string | null
+          customer_id: number | null
+          discount_amount: number | null
+          final_amount: number
+          id: number
+          payment_method: string
+          points_redeemed: number | null
+          total_amount: number
+        }
+        Insert: {
+          created_at?: string | null
+          customer_id?: number | null
+          discount_amount?: number | null
+          final_amount: number
+          id?: number
+          payment_method: string
+          points_redeemed?: number | null
+          total_amount: number
+        }
+        Update: {
+          created_at?: string | null
+          customer_id?: number | null
+          discount_amount?: number | null
+          final_amount?: number
+          id?: number
+          payment_method?: string
+          points_redeemed?: number | null
+          total_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          barcode: string | null
+          category: string | null
+          cost: number | null
+          created_at: string | null
+          id: number
+          name: string
+          price: number
+          reorder_level: number
+          sku: string
+          stock_quantity: number
+          updated_at: string | null
+        }
+        Insert: {
+          barcode?: string | null
+          category?: string | null
+          cost?: number | null
+          created_at?: string | null
+          id?: number
+          name: string
+          price?: number
+          reorder_level?: number
+          sku: string
+          stock_quantity?: number
+          updated_at?: string | null
+        }
+        Update: {
+          barcode?: string | null
+          category?: string | null
+          cost?: number | null
+          created_at?: string | null
           id?: number
           name?: string
+          price?: number
+          reorder_level?: number
+          sku?: string
+          stock_quantity?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      users: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+          is_admin: boolean
+          loyalty_points: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id: string
+          is_admin?: boolean
+          loyalty_points?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
+          is_admin?: boolean
+          loyalty_points?: number | null
         }
         Relationships: []
       }
@@ -72,7 +278,7 @@ export type Database = {
           p_points_redeemed: number
           p_total_amount: number
         }
-        Returns: number
+        Returns: Json
       }
     }
     Enums: {
@@ -92,12 +298,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -121,11 +327,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -146,11 +352,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -171,11 +377,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -188,11 +394,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

@@ -57,5 +57,6 @@ export interface AppUser {
   id: string;
   email: string;
   is_admin: boolean;
+  loyalty_points: number | null;
   created_at: string;
 } 
