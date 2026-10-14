@@ -7,12 +7,14 @@ import {
 } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { getIsAdmin } from '../lib/roles';
+import { getRole } from '../lib/roles';
+import type { AppRole } from '../types/app';
 import type { LoginInput, SignupInput } from '../lib/validation';
 
 interface AuthContextValue {
   user: User | null;
   session: Session | null;
+  role: AppRole | null;
   isAdmin: boolean;
   roleLoading: boolean;
   loading: boolean;
@@ -27,7 +29,8 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [role, setRole] = useState<AppRole | null>(null);
+  const isAdmin = role === 'admin';
   const [roleLoading, setRoleLoading] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -64,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Fetch is_admin whenever the user changes
   useEffect(() => {
     if (!user) {
-      setIsAdmin(false);
+      setRole(null);
       setRoleLoading(false);
       return;
     }
@@ -72,9 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     setRoleLoading(true);
 
-    getIsAdmin(user.id)
+    getRole(user.id)
       .then((value) => {
-        if (!cancelled) setIsAdmin(value);
+        if (!cancelled) setRole(value);
       })
       .finally(() => {
         if (!cancelled) setRoleLoading(false);
@@ -118,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         session,
+        role,
         isAdmin,
         roleLoading,
         loading,

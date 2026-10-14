@@ -119,13 +119,13 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
         {selectedCustomer && (
           <div className="member-info">
             👤 <strong>{selectedCustomer.name}</strong> | Points:{' '}
-            {selectedCustomer.points_balance || 0}
-            {(selectedCustomer.points_balance || 0) > 0 && (
+            {selectedCustomer.loyalty_points ?? 0}
+            {(selectedCustomer.loyalty_points ?? 0) > 0 && (
               <div className="points-redeem">
                 <label>Redeem Points (₱1/pt): </label>
                 <input
                   type="number"
-                  max={Math.min(selectedCustomer.points_balance, total)}
+                  max={Math.min(selectedCustomer.loyalty_points ?? 0, total)}
                   min="0"
                   value={pointsToRedeem}
                   onChange={(e) => setPointsToRedeem(Number(e.target.value))}

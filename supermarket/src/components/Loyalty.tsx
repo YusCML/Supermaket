@@ -30,7 +30,7 @@ export default function Loyalty({ customers = [], logs = [] }: LoyaltyProps) {
                 <td>{c.name || 'N/A'}</td>
                 <td>{c.phone || 'N/A'}</td>
                 <td>{c.loyalty_id || `#${c.id}`}</td>
-                <td><strong>{c.points_balance ?? 0} pts</strong></td>
+                <td><strong>{c.loyalty_points ?? 0} pts</strong></td>
               </tr>
             ))
           )}

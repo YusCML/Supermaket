@@ -12,18 +12,33 @@
   updated_at?: string;
 }
 
-export interface Customer {
-  id: number;
-  name: string;
-  phone: string;
-  loyalty_id: string | null;
-  points_balance: number;
+export type AppRole = 'admin' | 'cashier' | 'customer';
+
+export interface AppUser {
+  id: string;
+  email: string;
+  name?: string | null;
+  phone?: string | null;
+  role: AppRole;
   created_at?: string;
 }
 
+export interface LoyaltyMember {
+  id: string;
+  email: string;
+  name?: string | null;
+  phone?: string | null;
+  role: AppRole;
+  loyalty_id: string | null;
+  loyalty_points: number;
+  created_at?: string;
+}
+
+export type Customer = LoyaltyMember;
+
 export interface LoyaltyLog {
   id: number;
-  customer_id: number;
+  customer_id: string;
   order_id: number | null;
   points_changed: number;
   reason?: string | null;
@@ -37,7 +52,7 @@ export interface CartItem extends Product {
 
 export interface CheckoutPayload {
   cart: CartItem[];
-  customerId: number | null;
+  customerId: string | null;
   pointsToRedeem: number;
   paymentMethod: 'Cash' | 'Card' | 'Loyalty Points';
 }
@@ -53,10 +68,4 @@ export interface NewProductInput {
   reorder_level: number;
 }
 
-export interface AppUser {
-  id: string;
-  email: string;
-  is_admin: boolean;
-  loyalty_points: number | null;
-  created_at: string;
-} 
+// merged above 

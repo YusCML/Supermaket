@@ -39,37 +39,94 @@ export type Database = {
   }
   public: {
     Tables: {
-      customers: {
+      admin: {
         Row: {
           created_at: string | null
-          id: number
-          loyalty_id: string | null
-          name: string
-          phone: string
-          points_balance: number
+          id: string
+          user_id: string
         }
         Insert: {
           created_at?: string | null
-          id?: number
-          loyalty_id?: string | null
-          name: string
-          phone: string
-          points_balance?: number
+          id?: string
+          user_id: string
         }
         Update: {
           created_at?: string | null
-          id?: number
-          loyalty_id?: string | null
-          name?: string
-          phone?: string
-          points_balance?: number
+          id?: string
+          user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "admin_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cashier: {
+        Row: {
+          created_at: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cashier_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer: {
+        Row: {
+          created_at: string | null
+          id: string
+          loyalty_id: string | null
+          loyalty_points: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          loyalty_id?: string | null
+          loyalty_points?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          loyalty_id?: string | null
+          loyalty_points?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       loyalty_logs: {
         Row: {
           created_at: string | null
-          customer_id: number | null
+          customer_id: string
           id: number
           order_id: number | null
           points_changed: number
@@ -78,7 +135,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
-          customer_id?: number | null
+          customer_id: string
           id?: number
           order_id?: number | null
           points_changed: number
@@ -87,7 +144,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
-          customer_id?: number | null
+          customer_id?: string
           id?: number
           order_id?: number | null
           points_changed?: number
@@ -96,17 +153,17 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "loyalty_log_customer_id_fkey"
-            columns: ["customer_id"]
-            isOneToOne: false
-            referencedRelation: "customers"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "loyalty_log_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loyalty_logs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -159,7 +216,7 @@ export type Database = {
       orders: {
         Row: {
           created_at: string | null
-          customer_id: number | null
+          customer_id: string | null
           discount_amount: number | null
           final_amount: number
           id: number
@@ -169,7 +226,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
-          customer_id?: number | null
+          customer_id?: string | null
           discount_amount?: number | null
           final_amount: number
           id?: number
@@ -179,7 +236,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
-          customer_id?: number | null
+          customer_id?: string | null
           discount_amount?: number | null
           final_amount?: number
           id?: number
@@ -192,7 +249,7 @@ export type Database = {
             foreignKeyName: "orders_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
-            referencedRelation: "customers"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -244,22 +301,25 @@ export type Database = {
           created_at: string | null
           email: string
           id: string
-          is_admin: boolean
-          loyalty_points: number | null
+          name: string | null
+          phone: string | null
+          role: string
         }
         Insert: {
           created_at?: string | null
           email: string
           id: string
-          is_admin?: boolean
-          loyalty_points?: number | null
+          name?: string | null
+          phone?: string | null
+          role?: string
         }
         Update: {
           created_at?: string | null
           email?: string
           id?: string
-          is_admin?: boolean
-          loyalty_points?: number | null
+          name?: string | null
+          phone?: string | null
+          role?: string
         }
         Relationships: []
       }
@@ -268,18 +328,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      process_pos_checkout: {
-        Args: {
-          p_cart_items: Json
-          p_customer_id: number
-          p_discount_amount: number
-          p_final_amount: number
-          p_payment_method: string
-          p_points_redeemed: number
-          p_total_amount: number
-        }
-        Returns: Json
-      }
+      process_pos_checkout:
+        | {
+            Args: {
+              p_cart_items: Json
+              p_customer_id: number
+              p_discount_amount: number
+              p_final_amount: number
+              p_payment_method: string
+              p_points_redeemed: number
+              p_total_amount: number
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_cart_items: Json
+              p_customer_id: string
+              p_discount_amount: number
+              p_final_amount: number
+              p_payment_method: string
+              p_points_redeemed: number
+              p_total_amount: number
+            }
+            Returns: Json
+          }
     }
     Enums: {
       [_ in never]: never

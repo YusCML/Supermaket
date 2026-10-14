@@ -22,11 +22,20 @@ export const api = {
 
   async getCustomers(): Promise<Customer[]> {
     const { data, error } = await supabase
-      .from('customers')
-      .select('*')
-      .order('id', { ascending: true });
+      .from('customer')
+      .select('user_id, loyalty_id, loyalty_points, users(email, name, phone, role, created_at)')
+      .order('created_at', { ascending: true, referencedTable: 'users' });
     if (error) throw error;
-    return (data ?? []) as Customer[];
+    return (data ?? []).map((row: any) => ({
+      id: row.user_id,
+      email: row.users?.email ?? '',
+      name: row.users?.name ?? null,
+      phone: row.users?.phone ?? null,
+      role: row.users?.role ?? 'customer',
+      loyalty_id: row.loyalty_id,
+      loyalty_points: row.loyalty_points ?? 0,
+      created_at: row.users?.created_at ?? undefined,
+    })) as Customer[];
   },
 
   async getLoyaltyLogs(): Promise<LoyaltyLog[]> {
@@ -62,7 +71,7 @@ export const api = {
     const finalAmount = Math.max(0, totalAmount - discountAmount);
 
     const { data, error } = await supabase.rpc('process_pos_checkout', {
-      p_customer_id: customerId ? Number(customerId) : null,
+      p_customer_id: customerId ? customerId : null,
       p_total_amount: Number(totalAmount.toFixed(2)),
       p_discount_amount: Number(discountAmount.toFixed(2)),
       p_final_amount: Number(finalAmount.toFixed(2)),
