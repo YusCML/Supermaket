@@ -52,3 +52,10 @@ export interface NewProductInput {
   stock_quantity: number;
   reorder_level: number;
 }
+
+export interface AppUser {
+  id: string;
+  email: string;
+  is_admin: boolean;
+  created_at: string;
+} 

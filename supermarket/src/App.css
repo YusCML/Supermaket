@@ -455,3 +455,16 @@
   font-size: 0.9rem;
   text-align: left;
 }
+.admin-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1e40af;
+  vertical-align: middle;
+}

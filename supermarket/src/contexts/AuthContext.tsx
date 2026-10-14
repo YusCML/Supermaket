@@ -7,11 +7,14 @@ import {
 } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { getIsAdmin } from '../lib/roles';
 import type { LoginInput, SignupInput } from '../lib/validation';
 
 interface AuthContextValue {
   user: User | null;
   session: Session | null;
+  isAdmin: boolean;
+  roleLoading: boolean;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signUp: (input: SignupInput) => Promise<{ user: User | null; session: Session | null }>;
@@ -24,9 +27,11 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [roleLoading, setRoleLoading] = useState(false);
   const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
+  useEffect(() => {
     let active = true;
 
     supabase.auth
@@ -56,12 +61,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Fetch is_admin whenever the user changes
+  useEffect(() => {
+    if (!user) {
+      setIsAdmin(false);
+      setRoleLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setRoleLoading(true);
+
+    getIsAdmin(user.id)
+      .then((value) => {
+        if (!cancelled) setIsAdmin(value);
+      })
+      .finally(() => {
+        if (!cancelled) setRoleLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   const signInWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: window.location.origin,
-      },
+      options: { redirectTo: window.location.origin },
     });
     if (error) throw error;
   };
@@ -88,7 +115,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, session, loading, signInWithGoogle, signUp, signInWithEmail, signOut }}
+      value={{
+        user,
+        session,
+        isAdmin,
+        roleLoading,
+        loading,
+        signInWithGoogle,
+        signUp,
+        signInWithEmail,
+        signOut,
+      }}
     >
       {children}
     </AuthContext.Provider>
@@ -97,8 +134,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error('useAuth must be used inside <AuthProvider>');
-  }
+  if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');
   return ctx;
 }
