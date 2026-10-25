@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 4, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/BRYAN/Documents/GitHub/Supermaket/supermarket/app/layout.tsx"],"sourcesContent":["import type { Metadata } from 'next';\nimport '../src/App.css';\n\nexport const metadata: Metadata = {\n  title: 'SuperMarket Express',\n  description: 'Point of Sale, Inventory Management, and Loyalty System',\n};\n\nexport default function RootLayout({\n  children,\n}: {\n  children: React.ReactNode;\n}) {\n  return (\n    <html lang=\"en\">\n      <body>\n        <div id=\"root\">{children}</div>\n      </body>\n    </html>\n  );\n}"],"names":["metadata","title","description","RootLayout","children","lang","id"],"mappings":";;;;;;;;;AAGO,MAAMA,WAAqB;IAChCC,OAAO;IACPC,aAAa;AACf;AAEe,SAASC,WAAW,EACjCC,QAAQ,EAGT;IACC,qBACE,8OAAC;QAAKC,MAAK;kBACT,cAAA,8OAAC;sBACC,cAAA,8OAAC;gBAAIC,IAAG;0BAAQF;;;;;;;;;;;;;;;;AAIxB"}},
+    {"offset": {"line": 48, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/BRYAN/Documents/GitHub/Supermaket/supermarket/node_modules/next/src/server/route-modules/app-page/vendored/rsc/react-jsx-dev-runtime.ts"],"sourcesContent":["module.exports = (\n  require('../../module.compiled') as typeof import('../../module.compiled')\n).vendored['react-rsc']!.ReactJsxDevRuntime\n"],"names":["module","exports","require","vendored","ReactJsxDevRuntime"],"mappings":"AAAAA,OAAOC,OAAO,GACZC,QAAQ,4HACRC,QAAQ,CAAC,YAAY,CAAEC,kBAAkB","ignoreList":[0]}}]
+}
