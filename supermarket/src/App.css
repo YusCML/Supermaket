@@ -254,6 +254,12 @@
   color: #422006;
 }
 
+.stock-warning-icon {
+  color: #422006;
+  font-family: Arial, sans-serif;
+  font-weight: 900;
+}
+
 .badge-no-stock {
   background: #b91c1c;
   border-color: #7f1d1d;
