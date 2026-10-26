@@ -26,7 +26,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "db:push": "supabase db push",
+    "db:push": "supabase db push --linked",
     "db:pull": "supabase db pull --linked",
     "gen-types": "supabase gen types typescript --linked > src/types/supabase.ts"
   }
