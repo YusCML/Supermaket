@@ -64,18 +64,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Fetch is_admin whenever the user changes
+  // Look up this person's role (admin / cashier / customer from users.role)
+  // whenever a different person logs in.
+  //
+  // We watch the id rather than the user object because Supabase gives us a
+  // fresh object on every session refresh, and there's no need to re-check
+  // the role for the same person each time.
+  const userId = user?.id;
+
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setRole(null);
       setRoleLoading(false);
       return;
     }
 
+    // If the user changes again before this lookup finishes, ignore the old answer.
     let cancelled = false;
     setRoleLoading(true);
 
-    getRole(user.id)
+    getRole(userId)
       .then((value) => {
         if (!cancelled) setRole(value);
       })
@@ -86,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [userId]);
 
   const signInWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({

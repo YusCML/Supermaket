@@ -23,17 +23,23 @@ export default function Inventory({ products, onAddProduct, onRefresh }: Invento
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    await onAddProduct({
-      sku: form.sku,
-      barcode: form.barcode,
-      name: form.name,
-      category: form.category,
-      price: parseFloat(form.price),
-      cost: parseFloat(form.cost),
-      stock_quantity: parseInt(form.stock_quantity, 10),
-      reorder_level: parseInt(form.reorder_level, 10),
-    });
-    setForm(emptyForm);
+    try {
+      await onAddProduct({
+        sku: form.sku,
+        barcode: form.barcode,
+        name: form.name,
+        category: form.category,
+        price: parseFloat(form.price),
+        cost: parseFloat(form.cost),
+        stock_quantity: parseInt(form.stock_quantity, 10),
+        reorder_level: parseInt(form.reorder_level, 10),
+      });
+      // Only clear the form once the product is actually saved, so a failed
+      // save (duplicate SKU, negative price...) doesn't lose what was typed.
+      setForm(emptyForm);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not save the product');
+    }
   };
 
   return (

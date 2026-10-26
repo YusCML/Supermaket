@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Product, Customer, CartItem, CheckoutPayload } from '../types/app';
+import { discountForPoints, maxRedeemablePoints, roundToCentavos } from '../lib/loyalty';
 
 interface POSProps {
   products: Product[];
@@ -15,6 +16,10 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'Loyalty Points'>('Cash');
 
+  // Stops a double-click on "Complete Transaction" from saving the sale twice.
+  // A ref (not state) because it has to flip instantly, before React re-renders.
+  const isSubmitting = useRef(false);
+
   const filteredProducts = products.filter((p) => {
     const q = search.toLowerCase().trim();
     if (!q) return true;
@@ -25,15 +30,18 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
     );
   });
 
+  // Clicking a product adds one to the basket. The stock checks happen out
+  // here rather than inside setCart, because React may run that callback twice
+  // in development (StrictMode), which would pop the alert twice.
   const addToCart = (product: Product) => {
+    const alreadyInCart = cart.find((item) => item.id === product.id)?.quantity ?? 0;
+
     if (product.stock_quantity <= 0) return alert('Item is out of stock!');
+    if (alreadyInCart >= product.stock_quantity) return alert('Cannot exceed available stock!');
+
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
-        if (existing.quantity >= product.stock_quantity) {
-          alert('Cannot exceed available stock!');
-          return prev;
-        }
         return prev.map((item) =>
           item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
         );
@@ -46,26 +54,68 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
+  // A member can be found by phone number, loyalty card ID or account ID.
   const findCustomer = () => {
     const query = phoneSearch.trim();
     if (!query) return;
     const cust = customers.find(
-      (c) => c.phone === query || String(c.id) === query
+      (c) => c.phone === query || c.loyalty_id === query || String(c.id) === query
     );
-    if (cust) setSelectedCustomer(cust);
-    else alert('Customer not found!');
+    if (cust) {
+      setSelectedCustomer(cust);
+      // Points typed in for the previous member shouldn't carry over.
+      setPointsToRedeem(0);
+    } else {
+      alert('Customer not found!');
+    }
   };
 
-  const total = cart.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0);
-  const finalTotal = Math.max(0, total - pointsToRedeem);
+  // --- Bill math -------------------------------------------------------------
+  // This is only a preview for the cashier. The database recalculates all of
+  // it from the real prices when the sale is saved.
+  const total = roundToCentavos(
+    cart.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0)
+  );
+
+  // The member can't use more points than they have, or more than the bill
+  // needs. Clamping here (not only when typing) also covers the case where
+  // the cashier removes items after entering points.
+  const redeemablePoints = maxRedeemablePoints(selectedCustomer?.loyalty_points ?? 0, total);
+  const pointsApplied = Math.min(pointsToRedeem, redeemablePoints);
+  const discount = discountForPoints(pointsApplied, total);
+  const finalTotal = roundToCentavos(total - discount);
+
+  // Whatever gets typed in the points box: whole numbers only, never below 0,
+  // never above what the member can actually use on this bill.
+  const handlePointsChange = (value: string) => {
+    const points = Math.floor(Number(value) || 0);
+    setPointsToRedeem(Math.max(0, Math.min(points, redeemablePoints)));
+  };
 
   const handleCheckoutSubmit = async () => {
+    if (isSubmitting.current) return;
     if (cart.length === 0) return alert('Cart is empty!');
+
+    // "Loyalty Points" as the payment method means the whole bill is paid
+    // with points, so there has to be a member and enough points to reach ₱0.
+    // The database checks this too. Catching it here just saves a round trip.
+    if (paymentMethod === 'Loyalty Points') {
+      if (!selectedCustomer) {
+        return alert('Look up a member first to pay with loyalty points.');
+      }
+      if (finalTotal > 0) {
+        return alert(
+          `Not enough points redeemed to cover the bill. ₱${finalTotal.toFixed(2)} is still due.`
+        );
+      }
+    }
+
+    isSubmitting.current = true;
     try {
       await onCheckout({
         cart,
         customerId: selectedCustomer?.id ?? null,
-        pointsToRedeem,
+        pointsToRedeem: pointsApplied,
         paymentMethod,
       });
       alert('Checkout completed successfully!');
@@ -74,7 +124,10 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
       setPointsToRedeem(0);
       setPhoneSearch('');
     } catch (err) {
+      // Messages like "Not enough stock for ..." come straight from the database.
       alert(err instanceof Error ? err.message : 'Checkout failed');
+    } finally {
+      isSubmitting.current = false;
     }
   };
 
@@ -125,10 +178,10 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
                 <label>Redeem Points (₱1/pt): </label>
                 <input
                   type="number"
-                  max={Math.min(selectedCustomer.loyalty_points ?? 0, total)}
+                  max={redeemablePoints}
                   min="0"
-                  value={pointsToRedeem}
-                  onChange={(e) => setPointsToRedeem(Number(e.target.value))}
+                  value={pointsApplied}
+                  onChange={(e) => handlePointsChange(e.target.value)}
                 />
               </div>
             )}
@@ -158,7 +211,7 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
 
         <div className="summary">
           <div>Subtotal: ₱{total.toFixed(2)}</div>
-          <div>Discount: -₱{pointsToRedeem.toFixed(2)}</div>
+          <div>Discount: -₱{discount.toFixed(2)}</div>
           <h3>Total: ₱{finalTotal.toFixed(2)}</h3>
 
           <select
