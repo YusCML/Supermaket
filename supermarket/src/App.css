@@ -240,6 +240,26 @@
   color: #991b1b;
 }
 
+.badge-low-stock,
+.badge-no-stock {
+  display: inline-block;
+  border: 1px solid;
+  padding: 0.3rem 0.55rem;
+  white-space: nowrap;
+}
+
+.badge-low-stock {
+  background: #f59e0b;
+  border-color: #b45309;
+  color: #422006;
+}
+
+.badge-no-stock {
+  background: #b91c1c;
+  border-color: #7f1d1d;
+  color: #fff;
+}
+
 .btn-primary {
   background: #2563eb;
   color: #fff;

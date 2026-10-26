@@ -217,8 +217,8 @@ export default function Inventory({ products, inventory, batches, onAddProduct, 
                   </details>
                 </td>
                 <td>
-                  {isOutOfStock && <span className="badge badge-danger">No Stock</span>}
-                  {isLow && <span className="badge badge-warn">⚠️ Low Stock</span>}
+                  {isOutOfStock && <span className="badge badge-no-stock">No Stock</span>}
+                  {isLow && <span className="badge badge-low-stock">⚠️ Low Stock</span>}
                   {isExpiring && <span className="badge badge-warn">⏳ Expires soon</span>}
                   {!isOutOfStock && !isLow && !isExpiring && <span className="badge badge-ok">OK</span>}
                 </td>
