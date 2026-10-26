@@ -179,7 +179,8 @@ export default function Inventory({ products, inventory, batches, onAddProduct, 
               expires_soon: false,
               has_expired_batches: false,
             };
-            const isLow = p.stock_quantity <= p.reorder_level;
+            const isOutOfStock = summary.available_quantity === 0;
+            const isLow = !isOutOfStock && summary.available_quantity <= p.reorder_level;
             const isExpiring = summary.near_expiry_count > 0 || summary.expires_soon;
             return (
               <tr key={p.id} className={isLow || isExpiring ? 'low-stock-row' : ''}>
@@ -210,9 +211,10 @@ export default function Inventory({ products, inventory, batches, onAddProduct, 
                   </details>
                 </td>
                 <td>
+                  {isOutOfStock && <span className="badge badge-danger">No Stock</span>}
                   {isLow && <span className="badge badge-warn">⚠️ Low Stock</span>}
                   {isExpiring && <span className="badge badge-warn">⏳ Expires soon</span>}
-                  {!isLow && !isExpiring && <span className="badge badge-ok">OK</span>}
+                  {!isOutOfStock && !isLow && !isExpiring && <span className="badge badge-ok">OK</span>}
                 </td>
               </tr>
             );
