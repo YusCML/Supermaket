@@ -1,40 +1,55 @@
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
 import POS from '../components/POS';
 import Inventory from '../components/Inventory';
 import Loyalty from '../components/Loyalty';
 import Navbar, { type Tab } from '../components/Navbar';
 import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
+import type { SalesAnalytics } from '../types/app';
 import type {
   Product,
   Customer,
   LoyaltyLog,
   CheckoutPayload,
   NewProductInput,
+  ProductBatch,
+  ProductInventorySummary,
+  ReceiveStockInput,
 } from '../types/app';
 import '../App.css';
+
+const Analytics = lazy(() => import('../components/Analytics'));
 
 export default function AppPage() {
   const { user, signOut, isAdmin, roleLoading } = useAuth();
 
   const [activeTab, setActiveTab] = useState<Tab>('pos');
   const [products, setProducts] = useState<Product[]>([]);
+  const [inventory, setInventory] = useState<ProductInventorySummary[]>([]);
+  const [batches, setBatches] = useState<ProductBatch[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [logs, setLogs] = useState<LoyaltyLog[]>([]);
+  const [analytics, setAnalytics] = useState<SalesAnalytics | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [analyticsRefreshKey, setAnalyticsRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  // Pulls fresh products, members and the points log from the database.
-  // Called on login and again after every sale / new product, so stock levels
-  // and point balances on screen always match what's saved.
+  // Pull fresh products, members, batches, and inventory summaries after sales
+  // and stock changes so the POS and Inventory screens stay current.
   const loadData = async () => {
     try {
       setLoading(true);
-      const [prodData, custData, logData] = await Promise.all([
+      const [prodData, custData, logData, inventoryData, batchData] = await Promise.all([
         api.getProducts(),
         api.getCustomers(),
         api.getLoyaltyLogs(),
+        api.getInventoryOverview(),
+        api.getProductBatches(),
       ]);
       setProducts(prodData);
+      setInventory(inventoryData);
+      setBatches(batchData);
       setCustomers(custData);
       setLogs(logData);
     } catch (err) {
@@ -44,26 +59,20 @@ export default function AppPage() {
     }
   };
 
-  // Watch the user's id, not the whole user object. Supabase hands us a new
-  // user object every time it refreshes the session (about once an hour, and
-  // when you switch back to the browser tab). Reloading on each of those would
-  // flash the loading screen and wipe out the cashier's basket mid-sale.
+  // Watch the user's id rather than the whole session object to avoid
+  // reloading during token refreshes.
   useEffect(() => {
     if (user) loadData();
   }, [user?.id]);
 
-  // If the user loses admin rights (or was never admin) and is on an admin tab,
-  // kick them back to POS.
+  // If the user is no longer an admin, return them to the POS tab.
   useEffect(() => {
     if (!roleLoading && !isAdmin && activeTab !== 'pos') {
       setActiveTab('pos');
     }
   }, [isAdmin, roleLoading, activeTab]);
 
-  // Customers keep logging in (and becoming members) while an admin has the
-  // app open. Fetch the member list and points log again every time the
-  // Loyalty & Rewards tab is opened, so new members show up without a page
-  // reload. This runs in the background, so it doesn't flash the loading screen.
+  // Refresh member records when an admin opens Loyalty & Rewards.
   useEffect(() => {
     if (activeTab !== 'loyalty' || !isAdmin) return;
 
@@ -81,6 +90,51 @@ export default function AppPage() {
     };
   }, [activeTab, isAdmin]);
 
+  useEffect(() => {
+    if (activeTab !== 'analytics' || !isAdmin) return;
+
+    let cancelled = false;
+    setAnalyticsLoading(true);
+    setAnalyticsError(null);
+    api.getSalesAnalytics()
+      .then((data) => {
+        if (!cancelled) setAnalytics(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('Could not load sales analytics:', err);
+          setAnalyticsError(err instanceof Error ? err.message : 'Could not load sales analytics.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAnalyticsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, isAdmin, analyticsRefreshKey]);
+
+  useEffect(() => {
+    if (activeTab !== 'inventory' || !isAdmin) return;
+
+    let cancelled = false;
+    api.processExpiredBatches()
+      .then(() => {
+        if (!cancelled) return loadData();
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('Could not process expired inventory on page load:', err);
+          alert(err instanceof Error ? err.message : 'Could not process expired inventory');
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, isAdmin]);
+
   const handleCheckout = async (payload: CheckoutPayload) => {
     await api.processCheckout(payload);
     await loadData();
@@ -90,6 +144,28 @@ export default function AppPage() {
     await api.addProduct(product);
     await loadData();
   };
+
+  const handleReceiveStock = async (input: ReceiveStockInput) => {
+    await api.receiveStock(input);
+    await loadData();
+  };
+
+  const handleProcessExpired = async () => {
+    await api.processExpiredBatches();
+    await loadData();
+  };
+
+  const posProducts: ProductInventorySummary[] = inventory.length > 0
+    ? inventory
+    : products.map((product) => ({
+        ...product,
+        available_quantity: product.stock_quantity,
+        expired_quantity: 0,
+        near_expiry_count: 0,
+        earliest_expiry_date: null,
+        has_expired_batches: false,
+        expires_soon: false,
+      }));
 
   return (
     <div className="app-container">
@@ -114,7 +190,7 @@ export default function AppPage() {
           <>
             {activeTab === 'pos' && (
               <POS
-                products={products}
+                products={posProducts}
                 customers={customers}
                 onCheckout={handleCheckout}
               />
@@ -122,7 +198,11 @@ export default function AppPage() {
             {activeTab === 'inventory' && isAdmin && (
               <Inventory
                 products={products}
+                inventory={inventory}
+                batches={batches}
                 onAddProduct={handleAddProduct}
+                onReceiveStock={handleReceiveStock}
+                onProcessExpired={handleProcessExpired}
                 onRefresh={loadData}
               />
             )}
@@ -132,6 +212,16 @@ export default function AppPage() {
                 logs={logs}
                 onRefresh={loadData}
               />
+            )}
+            {activeTab === 'analytics' && isAdmin && (
+              <Suspense fallback={<div className="tab-content">Loading analytics…</div>}>
+                <Analytics
+                  analytics={analytics}
+                  loading={analyticsLoading}
+                  error={analyticsError}
+                  onRetry={() => setAnalyticsRefreshKey((key) => key + 1)}
+                />
+              </Suspense>
             )}
           </>
         )}

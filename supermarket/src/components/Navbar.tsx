@@ -1,6 +1,6 @@
 import { useAuth } from '../contexts/AuthContext';
 
-export type Tab = 'pos' | 'inventory' | 'loyalty';
+export type Tab = 'pos' | 'inventory' | 'loyalty' | 'analytics';
 
 interface NavbarProps {
   activeTab: Tab;
@@ -34,6 +34,12 @@ export default function Navbar({ activeTab, setActiveTab }: NavbarProps) {
               onClick={() => setActiveTab('loyalty')}
             >
               ⭐ Loyalty & Rewards
+            </button>
+            <button
+              className={activeTab === 'analytics' ? 'active' : ''}
+              onClick={() => setActiveTab('analytics')}
+            >
+              📊 Analytics
             </button>
           </>
         )}

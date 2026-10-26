@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
-import type { Product, Customer, CartItem, CheckoutPayload } from '../types/app';
+import type { ProductInventorySummary, Customer, CartItem, CheckoutPayload } from '../types/app';
 import { discountForPoints, maxRedeemablePoints, roundToCentavos } from '../lib/loyalty';
 import { useAuth } from '../contexts/AuthContext';
 
 interface POSProps {
-  products: Product[];
+  products: ProductInventorySummary[];
   customers: Customer[];
   onCheckout: (payload: CheckoutPayload) => Promise<void>;
 }
@@ -57,7 +57,7 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
   // Clicking a product adds one to the basket. The stock checks happen out
   // here rather than inside setCart, because React may run that callback twice
   // in development (StrictMode), which would pop the alert twice.
-  const addToCart = (product: Product) => {
+  const addToCart = (product: ProductInventorySummary) => {
     const alreadyInCart = cart.find((item) => item.id === product.id)?.quantity ?? 0;
 
     if (product.stock_quantity <= 0) return alert('Item is out of stock!');
@@ -226,6 +226,13 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
                 <h4>{p.name}</h4>
                 <p>₱{(p.price || 0).toFixed(2)}</p>
                 <small>Stock: {p.stock_quantity}</small>
+                {p.expires_soon && (
+                  <div>
+                    <span className="badge badge-warn">
+                      {p.near_expiry_count} nearing expiry
+                    </span>
+                  </div>
+                )}
               </div>
             ))
           )}
