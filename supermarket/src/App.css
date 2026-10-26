@@ -214,6 +214,20 @@
   background: #fef2f2;
 }
 
+.out-of-stock-row td {
+  background: #fff1f2;
+  border-top: 2px solid #991b1b;
+  border-bottom: 2px solid #991b1b;
+}
+
+.out-of-stock-row td:first-child {
+  border-left: 2px solid #991b1b;
+}
+
+.out-of-stock-row td:last-child {
+  border-right: 2px solid #991b1b;
+}
+
 .badge {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;

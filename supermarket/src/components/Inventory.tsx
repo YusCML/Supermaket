@@ -183,7 +183,13 @@ export default function Inventory({ products, inventory, batches, onAddProduct, 
             const isLow = !isOutOfStock && summary.available_quantity <= p.reorder_level;
             const isExpiring = summary.near_expiry_count > 0 || summary.expires_soon;
             return (
-              <tr key={p.id} className={isLow || isExpiring ? 'low-stock-row' : ''}>
+              <tr
+                key={p.id}
+                className={[
+                  isOutOfStock ? 'out-of-stock-row' : '',
+                  isLow || isExpiring ? 'low-stock-row' : '',
+                ].filter(Boolean).join(' ')}
+              >
                 <td>{p.sku} / {p.barcode}</td>
                 <td><strong>{p.name}</strong></td>
                 <td>{p.category}</td>
