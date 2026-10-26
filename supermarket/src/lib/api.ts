@@ -33,6 +33,7 @@ export const api = {
     return ((data ?? []) as ProductInventorySummary[]).map((row) => ({
       ...row,
       available_quantity: Number(row.available_quantity ?? row.stock_quantity ?? 0),
+      stock_quantity: Number(row.available_quantity ?? row.stock_quantity ?? 0),
       expired_quantity: Number(row.expired_quantity ?? 0),
       near_expiry_count: Number(row.near_expiry_count ?? 0),
       earliest_expiry_date: row.earliest_expiry_date ?? null,

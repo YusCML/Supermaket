@@ -146,7 +146,7 @@ export default function AppPage() {
           <>
             {activeTab === 'pos' && (
               <POS
-                products={products}
+                products={inventory}
                 customers={customers}
                 onCheckout={handleCheckout}
               />
