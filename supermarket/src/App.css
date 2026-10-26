@@ -211,11 +211,11 @@
 }
 
 .low-stock-row {
-  background: #fef2f2;
+  background: #fef9c3;
 }
 
 .out-of-stock-row td {
-  background: #fff1f2;
+  background: #fef2f2;
   border-top: 2px solid #991b1b;
   border-bottom: 2px solid #991b1b;
 }
