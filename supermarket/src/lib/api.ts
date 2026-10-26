@@ -8,6 +8,7 @@ import type {
   NewProductInput,
   ProductInventorySummary,
   ReceiveStockInput,
+  SalesAnalytics,
 } from '../types/app';
 
 // Every call the app makes to the database lives here.
@@ -67,6 +68,15 @@ export const api = {
   async processExpiredBatches(): Promise<void> {
     const { error } = await supabase.rpc('process_expired_batches');
     if (error) throw error;
+  },
+
+  async getSalesAnalytics(): Promise<SalesAnalytics> {
+    const { data, error } = await supabase.rpc('get_admin_sales_analytics');
+    if (error) throw error;
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('The analytics service returned an invalid response.');
+    }
+    return data as SalesAnalytics;
   },
 
   // Loyalty members: EVERY account (customers, cashiers, admins and the store
