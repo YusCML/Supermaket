@@ -1,14 +1,16 @@
 -- =============================================================================
--- Roles, and making sure everyone who logs in is a loyalty customer.
+-- Roles, and making every account a loyalty customer.
 --
 -- Builds on 20261017000000_role_profile_tables.sql, where users.role is one of:
 --
 --   'admin'    -> POS + Inventory + Loyalty & Rewards
 --   'cashier'  -> POS only
---   'customer' -> loyalty member (the default for everyone who logs in)
+--   'customer' -> loyalty member (the default for every new account)
 --
--- Every account has a loyalty profile in public.customer, and that table is
--- what the Loyalty & Rewards tab lists.
+-- The role only decides which screens you get. EVERY account in auth.users,
+-- whatever its role (store owner and admins included), also has a loyalty
+-- profile in public.customer, can earn and spend points, and is listed in the
+-- Loyalty & Rewards tab.
 --
 -- There's no screen for changing roles yet. To promote someone, run this in
 -- the Supabase SQL editor (the admin/cashier profile row is created for you
@@ -89,17 +91,94 @@ alter table public.customer
 
 
 -- -----------------------------------------------------------------------------
--- ensure_my_account(): "whoever just logged in is a customer".
+-- setup_customer_account(): the one place that turns an account into a
+-- loyalty customer. Used by the sign-up trigger, the login check and the
+-- catch-up at the bottom of this file, so they can never disagree.
 --
--- The app calls this right after every login (see src/lib/roles.ts). If this
--- person doesn't have a public.users row yet, they get one as a 'customer',
--- and either way they end up with a loyalty profile. That's what makes them
--- show up in the Loyalty & Rewards tab.
+--   * No public.users row yet?  -> add one as a 'customer'
+--   * No loyalty profile yet?   -> add one (with a loyalty ID)
+--   * Already set up?           -> leave it alone. It never changes a role,
+--                                  so admins and the store owner stay admins
+--                                  and are customers at the same time.
 --
--- Doing it at login (instead of with a trigger on sign-up) means it works no
--- matter how the account was created: email sign-up, Google, or added from
--- the dashboard. It never touches an existing role, so it can't be used to
--- promote yourself.
+-- Not callable from the app (it takes any user id), only by the functions below.
+-- -----------------------------------------------------------------------------
+create or replace function public.setup_customer_account(
+  p_user_id  uuid,
+  p_email    text,
+  p_metadata jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  -- users.email is required, so accounts without one (e.g. phone-only) are skipped.
+  if p_user_id is null or p_email is null then
+    return;
+  end if;
+
+  insert into public.users (id, email, name)
+  values (
+    p_user_id,
+    p_email,
+    -- Google sign-ins send the person's name along. Use it if we have it.
+    left(coalesce(p_metadata ->> 'full_name', p_metadata ->> 'name'), 255)
+  )
+  on conflict do nothing;
+
+  -- The users_ensure_profiles trigger normally creates the loyalty profile when
+  -- the users row is inserted, but older accounts may be missing it.
+  --   * "exists": the insert above can be skipped in the rare case where an
+  --     old row already uses this email, and a profile needs a users row.
+  --   * "not exists": only insert when it's really missing. Otherwise every
+  --     login would use up a loyalty ID number and the IDs would skip.
+  insert into public.customer (user_id)
+  select p_user_id
+  where exists (select 1 from public.users where id = p_user_id)
+    and not exists (select 1 from public.customer where user_id = p_user_id)
+  on conflict (user_id) do nothing;
+end;
+$$;
+
+revoke execute on function public.setup_customer_account(uuid, text, jsonb) from public, anon, authenticated;
+
+
+-- -----------------------------------------------------------------------------
+-- 1) The moment an account is created (email sign-up, Google, or added from
+--    the Supabase dashboard), it becomes a customer.
+--
+-- If anything goes wrong here we only log a warning. A broken trigger on
+-- auth.users would stop people from signing up at all, which is much worse
+-- than setting them up a moment later at their first login (step 2).
+-- -----------------------------------------------------------------------------
+create or replace function public.handle_new_auth_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  begin
+    perform public.setup_customer_account(new.id, new.email, new.raw_user_meta_data);
+  exception when others then
+    raise warning 'Could not set up customer account for %: %', new.id, sqlerrm;
+  end;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_auth_user();
+
+
+-- -----------------------------------------------------------------------------
+-- 2) ensure_my_account(): the app calls this right after every login (see
+--    src/lib/roles.ts) as a safety net. If the trigger above ever missed
+--    someone, this sets them up.
 -- -----------------------------------------------------------------------------
 create or replace function public.ensure_my_account()
 returns void
@@ -115,31 +194,9 @@ begin
     from auth.users
    where id = auth.uid();
 
-  -- Not logged in, or no email (users.email is required). Nothing to do.
-  if not found or me.email is null then
-    return;
+  if found then
+    perform public.setup_customer_account(me.id, me.email, me.raw_user_meta_data);
   end if;
-
-  insert into public.users (id, email, name)
-  values (
-    me.id,
-    me.email,
-    -- Google sign-ins send the person's name along. Use it if we have it.
-    coalesce(me.raw_user_meta_data ->> 'full_name', me.raw_user_meta_data ->> 'name')
-  )
-  on conflict do nothing;
-
-  -- The users_ensure_profiles trigger normally creates this when the users
-  -- row is inserted, but older accounts may be missing it.
-  --   * "exists": the insert above can be skipped in the rare case where an
-  --     old row already uses this email, and a profile needs a users row.
-  --   * "not exists": only insert when it's really missing. Otherwise every
-  --     login would use up a loyalty ID number and the IDs would skip.
-  insert into public.customer (user_id)
-  select me.id
-  where exists (select 1 from public.users where id = me.id)
-    and not exists (select 1 from public.customer where user_id = me.id)
-  on conflict (user_id) do nothing;
 end;
 $$;
 
@@ -148,19 +205,15 @@ grant  execute on function public.ensure_my_account() to authenticated;
 
 
 -- -----------------------------------------------------------------------------
--- Catch up everyone who already has an account, so they show up in the
--- Loyalty tab right away instead of on their next login.
+-- 3) Catch up every account that already exists (all of auth.users, including
+--    the store owner and admins), so they're in the Loyalty & Rewards list
+--    straight away instead of on their next login.
 -- -----------------------------------------------------------------------------
+select public.setup_customer_account(id, email, raw_user_meta_data)
+from auth.users;
 
--- Accounts with no public.users row yet become customers.
--- (Anyone already in public.users keeps their role.)
-insert into public.users (id, email, name)
-select id, email, coalesce(raw_user_meta_data ->> 'full_name', raw_user_meta_data ->> 'name')
-from auth.users
-where email is not null
-on conflict do nothing;
-
--- Everyone gets a loyalty profile...
+-- Rows in public.users that were added by hand (not through sign-up) get a
+-- loyalty profile too...
 insert into public.customer (user_id)
 select u.id from public.users u
 where not exists (select 1 from public.customer c where c.user_id = u.id);

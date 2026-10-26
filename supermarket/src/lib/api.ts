@@ -24,9 +24,9 @@ export const api = {
     return (data ?? []) as Product[];
   },
 
-  // Loyalty members: everyone who has logged in has a row in the `customer`
-  // table holding their loyalty ID and points, and the name/phone live on
-  // `users`. We fetch both in one go and flatten them into a single object for
+  // Loyalty members: EVERY account (customers, cashiers, admins and the store
+  // owner alike) has a row in the `customer` table holding their loyalty ID
+  // and points, and the name/phone live on `users`. We fetch both in one go and flatten them into a single object for
   // the POS lookup and the Loyalty tab. Only admins and cashiers can see other
   // people's rows.
   async getCustomers(): Promise<Customer[]> {

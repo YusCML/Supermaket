@@ -65,8 +65,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Whenever a different person logs in:
-  //   1. make sure they exist as a customer (first-timers get set up here,
-  //      which is what puts them in the Loyalty & Rewards list), then
+  //   1. make sure they exist as a customer (normally the database already did
+  //      this when the account was created; this is the safety net), then
   //   2. look up their role (admin / cashier / customer from users.role).
   // Step 1 has to finish first, or a first-timer's role would come back empty.
   //
