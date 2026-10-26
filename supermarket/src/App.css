@@ -216,16 +216,6 @@
 
 .out-of-stock-row td {
   background: #fef2f2;
-  border-top: 2px solid #991b1b;
-  border-bottom: 2px solid #991b1b;
-}
-
-.out-of-stock-row td:first-child {
-  border-left: 2px solid #991b1b;
-}
-
-.out-of-stock-row td:last-child {
-  border-right: 2px solid #991b1b;
 }
 
 .badge {
