@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { lazy, Suspense, useState, useEffect } from 'react';
 import POS from '../components/POS';
 import Inventory from '../components/Inventory';
 import Loyalty from '../components/Loyalty';
 import Navbar, { type Tab } from '../components/Navbar';
 import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
+import type { SalesAnalytics } from '../types/app';
 import type {
   Product,
   Customer,
@@ -17,6 +18,8 @@ import type {
 } from '../types/app';
 import '../App.css';
 
+const Analytics = lazy(() => import('../components/Analytics'));
+
 export default function AppPage() {
   const { user, signOut, isAdmin, roleLoading } = useAuth();
 
@@ -26,6 +29,10 @@ export default function AppPage() {
   const [batches, setBatches] = useState<ProductBatch[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [logs, setLogs] = useState<LoyaltyLog[]>([]);
+  const [analytics, setAnalytics] = useState<SalesAnalytics | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+  const [analyticsRefreshKey, setAnalyticsRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
 
   // Pull fresh products, members, batches, and inventory summaries after sales
@@ -84,6 +91,31 @@ export default function AppPage() {
   }, [activeTab, isAdmin]);
 
   useEffect(() => {
+    if (activeTab !== 'analytics' || !isAdmin) return;
+
+    let cancelled = false;
+    setAnalyticsLoading(true);
+    setAnalyticsError(null);
+    api.getSalesAnalytics()
+      .then((data) => {
+        if (!cancelled) setAnalytics(data);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('Could not load sales analytics:', err);
+          setAnalyticsError(err instanceof Error ? err.message : 'Could not load sales analytics.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAnalyticsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, isAdmin, analyticsRefreshKey]);
+
+  useEffect(() => {
     if (activeTab !== 'inventory' || !isAdmin) return;
 
     let cancelled = false;
@@ -123,6 +155,18 @@ export default function AppPage() {
     await loadData();
   };
 
+  const posProducts: ProductInventorySummary[] = inventory.length > 0
+    ? inventory
+    : products.map((product) => ({
+        ...product,
+        available_quantity: product.stock_quantity,
+        expired_quantity: 0,
+        near_expiry_count: 0,
+        earliest_expiry_date: null,
+        has_expired_batches: false,
+        expires_soon: false,
+      }));
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -146,7 +190,7 @@ export default function AppPage() {
           <>
             {activeTab === 'pos' && (
               <POS
-                products={inventory}
+                products={posProducts}
                 customers={customers}
                 onCheckout={handleCheckout}
               />
@@ -168,6 +212,16 @@ export default function AppPage() {
                 logs={logs}
                 onRefresh={loadData}
               />
+            )}
+            {activeTab === 'analytics' && isAdmin && (
+              <Suspense fallback={<div className="tab-content">Loading analytics…</div>}>
+                <Analytics
+                  analytics={analytics}
+                  loading={analyticsLoading}
+                  error={analyticsError}
+                  onRetry={() => setAnalyticsRefreshKey((key) => key + 1)}
+                />
+              </Suspense>
             )}
           </>
         )}
