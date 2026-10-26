@@ -54,6 +54,32 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
+  // A barcode scanner acts like a keyboard: it types the code into the search
+  // box and presses Enter. So on Enter we find the product with that exact
+  // barcode (or SKU) and put it straight into the basket, then clear the box
+  // so the next item can be scanned right away.
+  const handleScan = () => {
+    const code = search.trim();
+    if (!code) return;
+
+    const lowered = code.toLowerCase();
+    const match =
+      products.find((p) => p.barcode === code) ||
+      products.find((p) => (p.sku || '').toLowerCase() === lowered) ||
+      // Typed part of a name and only one product fits? Add that one.
+      (filteredProducts.length === 1 ? filteredProducts[0] : undefined);
+
+    if (!match) {
+      // Only speak up when it looks like a scanned code. For a name search the
+      // grid already shows what matched.
+      if (/^\d+$/.test(code)) alert(`No product found with barcode ${code}`);
+      return;
+    }
+
+    addToCart(match);
+    setSearch('');
+  };
+
   // A member can be found by phone number, loyalty ID (e.g. LOY-000012),
   // email, or account ID. New customers often haven't added a phone number,
   // so the loyalty ID or email is usually the way to find them.
@@ -148,6 +174,9 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
           className="search-bar"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleScan();
+          }}
         />
         <div className="product-grid">
           {filteredProducts.length === 0 ? (
@@ -172,6 +201,10 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
             placeholder="Phone Number / Customer ID"
             value={phoneSearch}
             onChange={(e) => setPhoneSearch(e.target.value)}
+            // Enter (or scanning a loyalty card) looks the member up, same as the button.
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') findCustomer();
+            }}
           />
           <button onClick={findCustomer}>Lookup Member</button>
         </div>

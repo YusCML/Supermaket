@@ -63,9 +63,17 @@ export const api = {
     return (data ?? []) as LoyaltyLog[];
   },
 
-  // Admin only. If no barcode was typed in, the SKU doubles as the barcode.
+  // Admin only. Every product must have a barcode (it's how the POS scans
+  // items). If none was typed in, we leave it out and the database assigns an
+  // in-store one automatically (see the product_barcodes migration). Spaces
+  // are trimmed so a scan matches exactly.
   async addProduct(product: NewProductInput): Promise<Product> {
-    const payload = { ...product, barcode: product.barcode || product.sku };
+    const barcode = product.barcode.trim();
+    const payload = {
+      ...product,
+      sku: product.sku.trim(),
+      barcode: barcode || undefined,
+    };
     const { data, error } = await supabase
       .from('products')
       .insert([payload])
