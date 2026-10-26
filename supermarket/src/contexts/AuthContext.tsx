@@ -7,7 +7,7 @@ import {
 } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { getRole } from '../lib/roles';
+import { ensureMyAccount, getRole } from '../lib/roles';
 import type { AppRole } from '../types/app';
 import type { LoginInput, SignupInput } from '../lib/validation';
 
@@ -64,18 +64,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Fetch is_admin whenever the user changes
+  // Whenever a different person logs in:
+  //   1. make sure they exist as a customer (normally the database already did
+  //      this when the account was created; this is the safety net), then
+  //   2. look up their role (admin / cashier / customer from users.role).
+  // Step 1 has to finish first, or a first-timer's role would come back empty.
+  //
+  // We watch the id rather than the user object because Supabase gives us a
+  // fresh object on every session refresh, and there's no need to redo this
+  // for the same person each time.
+  const userId = user?.id;
+
   useEffect(() => {
-    if (!user) {
+    if (!userId) {
       setRole(null);
       setRoleLoading(false);
       return;
     }
 
+    // If the user changes again before this lookup finishes, ignore the old answer.
     let cancelled = false;
     setRoleLoading(true);
 
-    getRole(user.id)
+    ensureMyAccount()
+      .then(() => getRole(userId))
       .then((value) => {
         if (!cancelled) setRole(value);
       })
@@ -86,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [userId]);
 
   const signInWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({

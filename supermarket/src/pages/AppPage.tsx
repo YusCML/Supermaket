@@ -23,6 +23,9 @@ export default function AppPage() {
   const [logs, setLogs] = useState<LoyaltyLog[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Pulls fresh products, members and the points log from the database.
+  // Called on login and again after every sale / new product, so stock levels
+  // and point balances on screen always match what's saved.
   const loadData = async () => {
     try {
       setLoading(true);
@@ -41,9 +44,13 @@ export default function AppPage() {
     }
   };
 
+  // Watch the user's id, not the whole user object. Supabase hands us a new
+  // user object every time it refreshes the session (about once an hour, and
+  // when you switch back to the browser tab). Reloading on each of those would
+  // flash the loading screen and wipe out the cashier's basket mid-sale.
   useEffect(() => {
     if (user) loadData();
-  }, [user]);
+  }, [user?.id]);
 
   // If the user loses admin rights (or was never admin) and is on an admin tab,
   // kick them back to POS.
@@ -52,6 +59,27 @@ export default function AppPage() {
       setActiveTab('pos');
     }
   }, [isAdmin, roleLoading, activeTab]);
+
+  // Customers keep logging in (and becoming members) while an admin has the
+  // app open. Fetch the member list and points log again every time the
+  // Loyalty & Rewards tab is opened, so new members show up without a page
+  // reload. This runs in the background, so it doesn't flash the loading screen.
+  useEffect(() => {
+    if (activeTab !== 'loyalty' || !isAdmin) return;
+
+    let cancelled = false;
+    Promise.all([api.getCustomers(), api.getLoyaltyLogs()])
+      .then(([custData, logData]) => {
+        if (cancelled) return;
+        setCustomers(custData);
+        setLogs(logData);
+      })
+      .catch((err) => console.error('Error refreshing loyalty data:', err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, isAdmin]);
 
   const handleCheckout = async (payload: CheckoutPayload) => {
     await api.processCheckout(payload);
