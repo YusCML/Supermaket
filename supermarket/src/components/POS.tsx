@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import type { Product, Customer, CartItem, CheckoutPayload } from '../types/app';
 import { discountForPoints, maxRedeemablePoints, roundToCentavos } from '../lib/loyalty';
+import { useAuth } from '../contexts/AuthContext';
 
 interface POSProps {
   products: Product[];
@@ -8,11 +9,34 @@ interface POSProps {
   onCheckout: (payload: CheckoutPayload) => Promise<void>;
 }
 
+// Does this member match what was typed in the member box? Phone number,
+// loyalty ID (e.g. LOY-000012), email or account ID all work. New customers
+// often haven't added a phone number, so the loyalty ID or email is usually
+// the way to find them.
+function matchesMember(c: Customer, query: string): boolean {
+  const lowered = query.toLowerCase();
+  return (
+    c.phone === query ||
+    c.loyalty_id?.toLowerCase() === lowered ||
+    c.email?.toLowerCase() === lowered ||
+    String(c.id) === query
+  );
+}
+
 export default function POS({ products = [], customers = [], onCheckout }: POSProps) {
+  const { user } = useAuth();
+
+  // Everyone who logs in is a loyalty member too, so by default a sale goes on
+  // the logged-in person's own account: their loyalty ID is already filled in
+  // and selected. If someone else is buying, type their loyalty ID instead.
+  // Clear the box for a walk-in (no member, no points).
+  const me = customers.find((c) => c.id === user?.id) ?? null;
+  const myMemberCode = me?.loyalty_id ?? me?.email ?? '';
+
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [phoneSearch, setPhoneSearch] = useState('');
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [phoneSearch, setPhoneSearch] = useState(myMemberCode);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(me);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'Loyalty Points'>('Cash');
 
@@ -80,20 +104,19 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
     setSearch('');
   };
 
-  // A member can be found by phone number, loyalty ID (e.g. LOY-000012),
-  // email, or account ID. New customers often haven't added a phone number,
-  // so the loyalty ID or email is usually the way to find them.
+  // Clearing the member box turns the sale into a walk-in: no member, no points.
+  const handleMemberInput = (value: string) => {
+    setPhoneSearch(value);
+    if (!value.trim()) {
+      setSelectedCustomer(null);
+      setPointsToRedeem(0);
+    }
+  };
+
   const findCustomer = () => {
     const query = phoneSearch.trim();
     if (!query) return;
-    const lowered = query.toLowerCase();
-    const cust = customers.find(
-      (c) =>
-        c.phone === query ||
-        c.loyalty_id?.toLowerCase() === lowered ||
-        c.email?.toLowerCase() === lowered ||
-        String(c.id) === query
-    );
+    const cust = customers.find((c) => matchesMember(c, query));
     if (cust) {
       setSelectedCustomer(cust);
       // Points typed in for the previous member shouldn't carry over.
@@ -129,6 +152,21 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
     if (isSubmitting.current) return;
     if (cart.length === 0) return alert('Cart is empty!');
 
+    // Whoever's ID is in the member box is who gets the points. If the cashier
+    // typed a different ID but never pressed Lookup, catch it here so the
+    // points don't land on the wrong account. We switch to that member and
+    // stop, so the cashier can check the total (their points may differ).
+    const memberQuery = phoneSearch.trim();
+    if (memberQuery && !(selectedCustomer && matchesMember(selectedCustomer, memberQuery))) {
+      const typedMember = customers.find((c) => matchesMember(c, memberQuery));
+      if (!typedMember) return alert('Customer not found!');
+      setSelectedCustomer(typedMember);
+      setPointsToRedeem(0);
+      return alert(
+        `Member changed to ${typedMember.name || typedMember.email}. Check the total, then press Complete Transaction again.`
+      );
+    }
+
     // "Loyalty Points" as the payment method means the whole bill is paid
     // with points, so there has to be a member and enough points to reach ₱0.
     // The database checks this too. Catching it here just saves a round trip.
@@ -153,9 +191,10 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
       });
       alert('Checkout completed successfully!');
       setCart([]);
-      setSelectedCustomer(null);
+      // Back to the default for the next sale: the logged-in person's account.
+      setSelectedCustomer(me);
       setPointsToRedeem(0);
-      setPhoneSearch('');
+      setPhoneSearch(myMemberCode);
     } catch (err) {
       // Messages like "Not enough stock for ..." come straight from the database.
       alert(err instanceof Error ? err.message : 'Checkout failed');
@@ -200,7 +239,7 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
           <input
             placeholder="Phone Number / Customer ID"
             value={phoneSearch}
-            onChange={(e) => setPhoneSearch(e.target.value)}
+            onChange={(e) => handleMemberInput(e.target.value)}
             // Enter (or scanning a loyalty card) looks the member up, same as the button.
             onKeyDown={(e) => {
               if (e.key === 'Enter') findCustomer();
