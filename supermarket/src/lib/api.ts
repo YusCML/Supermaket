@@ -24,10 +24,11 @@ export const api = {
     return (data ?? []) as Product[];
   },
 
-  // Loyalty members: every account has a row in the `customer` table holding
-  // its points, and the name/phone live on `users`. We fetch both in one go
-  // and flatten them into a single object for the POS lookup and Loyalty tab.
-  // Only admins and cashiers can see other people's rows.
+  // Loyalty members: everyone who has logged in has a row in the `customer`
+  // table holding their loyalty ID and points, and the name/phone live on
+  // `users`. We fetch both in one go and flatten them into a single object for
+  // the POS lookup and the Loyalty tab. Only admins and cashiers can see other
+  // people's rows.
   async getCustomers(): Promise<Customer[]> {
     const { data, error } = await supabase
       .from('customer')
@@ -37,7 +38,9 @@ export const api = {
     return (data ?? []).map((row: any) => ({
       id: row.user_id,
       email: row.users?.email ?? '',
-      name: row.users?.name ?? null,
+      // People who signed up with email/password haven't given us a name, so
+      // show their email instead of "N/A". That way you can tell them apart.
+      name: row.users?.name || row.users?.email || null,
       phone: row.users?.phone ?? null,
       role: row.users?.role ?? 'customer',
       loyalty_id: row.loyalty_id,

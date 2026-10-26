@@ -54,12 +54,19 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  // A member can be found by phone number, loyalty card ID or account ID.
+  // A member can be found by phone number, loyalty ID (e.g. LOY-000012),
+  // email, or account ID. New customers often haven't added a phone number,
+  // so the loyalty ID or email is usually the way to find them.
   const findCustomer = () => {
     const query = phoneSearch.trim();
     if (!query) return;
+    const lowered = query.toLowerCase();
     const cust = customers.find(
-      (c) => c.phone === query || c.loyalty_id === query || String(c.id) === query
+      (c) =>
+        c.phone === query ||
+        c.loyalty_id?.toLowerCase() === lowered ||
+        c.email?.toLowerCase() === lowered ||
+        String(c.id) === query
     );
     if (cust) {
       setSelectedCustomer(cust);

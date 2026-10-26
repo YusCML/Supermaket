@@ -60,6 +60,27 @@ export default function AppPage() {
     }
   }, [isAdmin, roleLoading, activeTab]);
 
+  // Customers keep logging in (and becoming members) while an admin has the
+  // app open. Fetch the member list and points log again every time the
+  // Loyalty & Rewards tab is opened, so new members show up without a page
+  // reload. This runs in the background, so it doesn't flash the loading screen.
+  useEffect(() => {
+    if (activeTab !== 'loyalty' || !isAdmin) return;
+
+    let cancelled = false;
+    Promise.all([api.getCustomers(), api.getLoyaltyLogs()])
+      .then(([custData, logData]) => {
+        if (cancelled) return;
+        setCustomers(custData);
+        setLogs(logData);
+      })
+      .catch((err) => console.error('Error refreshing loyalty data:', err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, isAdmin]);
+
   const handleCheckout = async (payload: CheckoutPayload) => {
     await api.processCheckout(payload);
     await loadData();
