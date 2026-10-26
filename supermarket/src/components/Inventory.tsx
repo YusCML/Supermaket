@@ -1,9 +1,13 @@
-import { useState, type FormEvent } from 'react';
-import type { Product, NewProductInput } from '../types/app';
+import { useMemo, useState, type FormEvent } from 'react';
+import type { NewProductInput, Product, ProductBatch, ProductInventorySummary, ReceiveStockInput } from '../types/app';
 
 interface InventoryProps {
   products: Product[];
+  inventory: ProductInventorySummary[];
+  batches: ProductBatch[];
   onAddProduct: (product: NewProductInput) => Promise<void>;
+  onReceiveStock: (input: ReceiveStockInput) => Promise<void>;
+  onProcessExpired: () => Promise<void>;
   onRefresh?: () => void;
 }
 
@@ -18,8 +22,46 @@ const emptyForm = {
   reorder_level: '',
 };
 
-export default function Inventory({ products, onAddProduct, onRefresh }: InventoryProps) {
+const emptyReceive = {
+  product_id: '',
+  quantity: '',
+  expiry_date: '',
+  batch_code: '',
+};
+
+function phtToday() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day));
+}
+
+function formatExpiry(expiryDate: string | null) {
+  if (!expiryDate) return 'No expiry date';
+  const [year, month, day] = expiryDate.split('-').map(Number);
+  const daysUntilExpiry = Math.floor(
+    (Date.UTC(year, month - 1, day) - phtToday()) / 86_400_000
+  );
+  if (daysUntilExpiry === 0) return 'Expired today';
+  if (daysUntilExpiry === 1) return 'Expires tomorrow';
+  if (daysUntilExpiry > 1 && daysUntilExpiry <= 7) return `Expires in ${daysUntilExpiry} days`;
+  if (daysUntilExpiry < 0) return `Expired ${Math.abs(daysUntilExpiry)} days ago`;
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString();
+}
+
+export default function Inventory({ products, inventory, batches, onAddProduct, onReceiveStock, onProcessExpired, onRefresh }: InventoryProps) {
   const [form, setForm] = useState(emptyForm);
+  const [receiveForm, setReceiveForm] = useState(emptyReceive);
+  const [processingExpired, setProcessingExpired] = useState(false);
+
+  const inventoryMap = useMemo(
+    () => Object.fromEntries(inventory.map((item) => [item.id, item])),
+    [inventory]
+  );
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -34,11 +76,42 @@ export default function Inventory({ products, onAddProduct, onRefresh }: Invento
         stock_quantity: parseInt(form.stock_quantity, 10),
         reorder_level: parseInt(form.reorder_level, 10),
       });
-      // Only clear the form once the product is actually saved, so a failed
-      // save (duplicate SKU, negative price...) doesn't lose what was typed.
       setForm(emptyForm);
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Could not save the product');
+    }
+  };
+
+  const handleReceive = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!receiveForm.product_id || !receiveForm.quantity || !receiveForm.expiry_date) {
+      alert('Select a product, quantity, and expiry date before receiving stock.');
+      return;
+    }
+
+    try {
+      await onReceiveStock({
+        product_id: Number(receiveForm.product_id),
+        quantity: Number(receiveForm.quantity),
+        expiry_date: receiveForm.expiry_date,
+        batch_code: receiveForm.batch_code || undefined,
+      });
+      setReceiveForm(emptyReceive);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not receive stock');
+    }
+  };
+
+  const handleProcessExpired = async () => {
+    if (processingExpired) return;
+    setProcessingExpired(true);
+    try {
+      await onProcessExpired();
+      alert('Expired stock has been processed.');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not process expired stock');
+    } finally {
+      setProcessingExpired(false);
     }
   };
 
@@ -61,6 +134,29 @@ export default function Inventory({ products, onAddProduct, onRefresh }: Invento
         <button type="submit" className="btn-primary">Save Product</button>
       </form>
 
+      <form className="form-card" onSubmit={handleReceive}>
+        <h3>Receive Stock by Batch</h3>
+        <div className="form-grid">
+          <select value={receiveForm.product_id} onChange={(e) => setReceiveForm({ ...receiveForm, product_id: e.target.value })} required>
+            <option value="">Select product</option>
+            {products.map((product) => (
+              <option key={product.id} value={product.id}>{product.name}</option>
+            ))}
+          </select>
+          <input type="number" min="1" placeholder="Batch quantity" value={receiveForm.quantity} onChange={(e) => setReceiveForm({ ...receiveForm, quantity: e.target.value })} required />
+          <input type="date" value={receiveForm.expiry_date} onChange={(e) => setReceiveForm({ ...receiveForm, expiry_date: e.target.value })} required />
+          <input placeholder="Optional batch code" value={receiveForm.batch_code} onChange={(e) => setReceiveForm({ ...receiveForm, batch_code: e.target.value })} />
+        </div>
+        <button type="submit" className="btn-primary">Receive Stock</button>
+      </form>
+
+      <div className="inventory-toolbar">
+        <button className="btn-primary" onClick={handleProcessExpired} disabled={processingExpired}>
+          {processingExpired ? 'Processing…' : 'Process expired stock'}
+        </button>
+        {onRefresh && <button className="btn-secondary" onClick={onRefresh}>Refresh</button>}
+      </div>
+
       <table className="data-table">
         <thead>
           <tr>
@@ -69,25 +165,54 @@ export default function Inventory({ products, onAddProduct, onRefresh }: Invento
             <th>Category</th>
             <th>Price</th>
             <th>Stock Level</th>
+            <th>Expiry</th>
             <th>Status</th>
           </tr>
         </thead>
         <tbody>
           {products.map((p) => {
+            const summary = inventoryMap[p.id] ?? {
+              available_quantity: p.stock_quantity,
+              expired_quantity: 0,
+              near_expiry_count: 0,
+              earliest_expiry_date: null,
+              expires_soon: false,
+              has_expired_batches: false,
+            };
             const isLow = p.stock_quantity <= p.reorder_level;
+            const isExpiring = summary.near_expiry_count > 0 || summary.expires_soon;
             return (
-              <tr key={p.id} className={isLow ? 'low-stock-row' : ''}>
+              <tr key={p.id} className={isLow || isExpiring ? 'low-stock-row' : ''}>
                 <td>{p.sku} / {p.barcode}</td>
                 <td><strong>{p.name}</strong></td>
                 <td>{p.category}</td>
                 <td>₱{p.price.toFixed(2)}</td>
-                <td>{p.stock_quantity}</td>
+                <td>{summary.available_quantity}</td>
                 <td>
-                  {isLow ? (
-                    <span className="badge badge-warn">⚠️ Low Stock (≤{p.reorder_level})</span>
-                  ) : (
-                    <span className="badge badge-ok">OK</span>
+                  {formatExpiry(summary.earliest_expiry_date)}
+                  {summary.near_expiry_count > 0 && (
+                    <div className="expiry-note">
+                      {summary.near_expiry_count} of {summary.available_quantity} stocks nearing expiry
+                    </div>
                   )}
+                  <details className="batch-details">
+                    <summary>Batch details</summary>
+                    <ul>
+                      {batches.filter((batch) => batch.product_id === p.id).map((batch) => (
+                        <li key={batch.id}>
+                          {batch.batch_code}: {batch.quantity_remaining}/{batch.quantity_received}
+                          {' · '}{formatExpiry(batch.expiry_date)}
+                          {' · '}{batch.status}
+                        </li>
+                      ))}
+                      {!batches.some((batch) => batch.product_id === p.id) && <li>No batches recorded</li>}
+                    </ul>
+                  </details>
+                </td>
+                <td>
+                  {isLow && <span className="badge badge-warn">⚠️ Low Stock</span>}
+                  {isExpiring && <span className="badge badge-warn">⏳ Expires soon</span>}
+                  {!isLow && !isExpiring && <span className="badge badge-ok">OK</span>}
                 </td>
               </tr>
             );

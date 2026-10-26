@@ -1,10 +1,13 @@
 ﻿import { supabase } from './supabase';
 import type {
   Product,
+  ProductBatch,
   Customer,
   LoyaltyLog,
   CheckoutPayload,
   NewProductInput,
+  ProductInventorySummary,
+  ReceiveStockInput,
 } from '../types/app';
 
 // Every call the app makes to the database lives here.
@@ -22,6 +25,47 @@ export const api = {
       .order('id', { ascending: true });
     if (error) throw error;
     return (data ?? []) as Product[];
+  },
+
+  async getInventoryOverview(): Promise<ProductInventorySummary[]> {
+    const { data, error } = await supabase.rpc('get_product_inventory');
+    if (error) throw error;
+    return ((data ?? []) as ProductInventorySummary[]).map((row) => ({
+      ...row,
+      available_quantity: Number(row.available_quantity ?? row.stock_quantity ?? 0),
+      expired_quantity: Number(row.expired_quantity ?? 0),
+      near_expiry_count: Number(row.near_expiry_count ?? 0),
+      earliest_expiry_date: row.earliest_expiry_date ?? null,
+      has_expired_batches: Boolean(row.has_expired_batches),
+      expires_soon: Boolean(row.expires_soon),
+    }));
+  },
+
+  async getProductBatches(): Promise<ProductBatch[]> {
+    const { data, error } = await supabase
+      .from('product_batches')
+      .select('*')
+      .order('expiry_date', { ascending: true, nullsFirst: false });
+    if (error) throw error;
+    return (data ?? []) as ProductBatch[];
+  },
+
+  async receiveStock(input: ReceiveStockInput): Promise<void> {
+    const { data, error } = await supabase.rpc('receive_stock', {
+      p_product_id: input.product_id,
+      p_quantity: input.quantity,
+      p_expiry_date: input.expiry_date,
+      p_batch_code: input.batch_code ?? null,
+    });
+    if (error) throw error;
+    if (data && typeof data === 'object' && 'success' in data && data.success === false) {
+      throw new Error('Stock could not be received.');
+    }
+  },
+
+  async processExpiredBatches(): Promise<void> {
+    const { error } = await supabase.rpc('process_expired_batches');
+    if (error) throw error;
   },
 
   // Loyalty members: EVERY account (customers, cashiers, admins and the store

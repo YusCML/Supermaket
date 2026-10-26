@@ -12,6 +12,69 @@
   updated_at?: string;
 }
 
+export interface ProductBatch {
+  id: number;
+  product_id: number;
+  batch_code: string;
+  quantity_received: number;
+  quantity_remaining: number;
+  expiry_date: string | null;
+  status: 'active' | 'expired' | 'spoiled' | 'manual';
+  received_at?: string;
+  expired_at?: string | null;
+  created_at?: string;
+}
+
+export interface ProductInventorySummary extends Product {
+  available_quantity: number;
+  expired_quantity: number;
+  near_expiry_count: number;
+  earliest_expiry_date: string | null;
+  has_expired_batches: boolean;
+  expires_soon: boolean;
+}
+
+export interface ReceiveStockInput {
+  product_id: number;
+  quantity: number;
+  expiry_date: string;
+  batch_code?: string;
+}
+
+export interface SalesTrendPoint {
+  date: string;
+  revenue: number;
+}
+
+export interface MonthlyRevenuePoint {
+  month: string;
+  revenue: number;
+}
+
+export interface PaymentMixPoint {
+  name: string;
+  value: number;
+}
+
+export interface TopProductPoint {
+  name: string;
+  revenue: number;
+  quantity: number;
+}
+
+export interface SalesAnalytics {
+  today_revenue: number;
+  week_revenue: number;
+  month_revenue: number;
+  year_revenue: number;
+  net_revenue: number;
+  thirty_day_trend: SalesTrendPoint[];
+  monthly_revenue: MonthlyRevenuePoint[];
+  payment_mix: PaymentMixPoint[];
+  top_products: TopProductPoint[];
+  spoilage_losses: number;
+}
+
 export type AppRole = 'admin' | 'cashier' | 'customer';
 
 export interface AppUser {
