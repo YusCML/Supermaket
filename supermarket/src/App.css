@@ -640,3 +640,47 @@
   margin: 0.75rem 0 0;
   font-size: 0.9rem;
 }
+
+/* Admin: Users & Roles tab */
+.tab-help {
+  color: #64748b;
+  margin: 0.25rem 0 1rem;
+  font-size: 0.9rem;
+}
+
+.role-select {
+  padding: 0.4rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.btn-sm:disabled,
+.role-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.user-roles-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.user-roles-toolbar .search-bar {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.role-checkbox {
+  width: 1.1rem;
+  height: 1.1rem;
+  cursor: pointer;
+}
+
+.role-checkbox:disabled {
+  cursor: not-allowed;
+}
+
+.role-actions {
+  white-space: nowrap;
+}
