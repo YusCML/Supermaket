@@ -629,6 +629,58 @@
   color: #1e40af;
   vertical-align: middle;
 }
+/* Header buttons (Switch role / Sign out) */
+.header-actions {
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+/* "Continue as" role picker shown after login */
+.role-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  text-align: left;
+}
+
+.role-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.9rem 1rem;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.role-option:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.role-option-title {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.role-option-text {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.role-signout {
+  margin-top: 1.25rem;
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
 
 /* Cashier's read-only stock screen */
 .read-only-note {

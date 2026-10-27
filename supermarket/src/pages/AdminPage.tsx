@@ -2,79 +2,79 @@ import { lazy, Suspense, useState, useEffect } from 'react';
 import POS from '../components/POS';
 import Inventory from '../components/Inventory';
 import Loyalty from '../components/Loyalty';
-import Navbar, { type Tab } from '../components/Navbar';
+import UserRoles from '../components/UserRoles';
+import Navbar, { type NavTab } from '../components/Navbar';
+import AppHeader from '../components/AppHeader';
 import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
-import type { SalesAnalytics } from '../types/app';
+import { useStoreData } from '../hooks/useStoreData';
 import type {
-  Product,
-  Customer,
-  LoyaltyLog,
-  CheckoutPayload,
+  AppRole,
   NewProductInput,
-  ProductBatch,
-  ProductInventorySummary,
   ReceiveStockInput,
+  SalesAnalytics,
 } from '../types/app';
 import '../App.css';
 
 const Analytics = lazy(() => import('../components/Analytics'));
 
-export default function AppPage() {
-  const { user, signOut, isAdmin, roleLoading } = useAuth();
+type AdminTab = 'pos' | 'inventory' | 'loyalty' | 'analytics' | 'users';
 
-  const [activeTab, setActiveTab] = useState<Tab>('pos');
-  const [products, setProducts] = useState<Product[]>([]);
-  const [inventory, setInventory] = useState<ProductInventorySummary[]>([]);
-  const [batches, setBatches] = useState<ProductBatch[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [logs, setLogs] = useState<LoyaltyLog[]>([]);
+const ADMIN_TABS: NavTab<AdminTab>[] = [
+  { id: 'pos', label: '🛒 POS Checkout' },
+  { id: 'inventory', label: '📦 Inventory Management' },
+  { id: 'loyalty', label: '⭐ Loyalty & Rewards' },
+  { id: 'analytics', label: '📊 Analytics' },
+  { id: 'users', label: '👥 Users & Roles' },
+];
+
+// The admin interface (/admin). Only admins can open this page (see
+// ProtectedRoute in App.tsx), so nothing in here has to check the role again.
+// The database still checks every admin action on its own.
+export default function AdminPage() {
+  const { user, refreshRoles } = useAuth();
+  const {
+    products,
+    inventory,
+    batches,
+    customers,
+    setCustomers,
+    logs,
+    setLogs,
+    loading,
+    loadData,
+    handleCheckout,
+    posProducts,
+  } = useStoreData('admin');
+
+  const [activeTab, setActiveTab] = useState<AdminTab>('pos');
   const [analytics, setAnalytics] = useState<SalesAnalytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [analyticsRefreshKey, setAnalyticsRefreshKey] = useState(0);
-  const [loading, setLoading] = useState(true);
+  // Who holds which staff role, for the Users & Roles tab.
+  const [staffRoles, setStaffRoles] = useState<Record<string, AppRole[]>>({});
 
-  // Pull fresh products, members, batches, and inventory summaries after sales
-  // and stock changes so the POS and Inventory screens stay current.
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [prodData, custData, logData, inventoryData, batchData] = await Promise.all([
-        api.getProducts(),
-        api.getCustomers(),
-        api.getLoyaltyLogs(),
-        api.getInventoryOverview(),
-        api.getProductBatches(),
-      ]);
-      setProducts(prodData);
-      setInventory(inventoryData);
-      setBatches(batchData);
-      setCustomers(custData);
-      setLogs(logData);
-    } catch (err) {
-      console.error('Error loading Supabase data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Watch the user's id rather than the whole session object to avoid
-  // reloading during token refreshes.
+  // Load the role assignments whenever Users & Roles is opened.
   useEffect(() => {
-    if (user) loadData();
-  }, [user?.id]);
+    if (activeTab !== 'users') return;
 
-  // If the user is no longer an admin, return them to the POS tab.
-  useEffect(() => {
-    if (!roleLoading && !isAdmin && activeTab !== 'pos') {
-      setActiveTab('pos');
-    }
-  }, [isAdmin, roleLoading, activeTab]);
+    let cancelled = false;
+    api.getStaffRoles()
+      .then((roles) => {
+        if (!cancelled) setStaffRoles(roles);
+      })
+      .catch((err) => console.error('Error loading roles:', err));
 
-  // Refresh member records when an admin opens Loyalty & Rewards.
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
+
+  // Refresh member records when Loyalty & Rewards or Users & Roles is opened,
+  // so new sign-ups and fresh points show up without reloading the page.
   useEffect(() => {
-    if (activeTab !== 'loyalty' || !isAdmin) return;
+    if (activeTab !== 'loyalty' && activeTab !== 'users') return;
 
     let cancelled = false;
     Promise.all([api.getCustomers(), api.getLoyaltyLogs()])
@@ -88,10 +88,10 @@ export default function AppPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, isAdmin]);
+  }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab !== 'analytics' || !isAdmin) return;
+    if (activeTab !== 'analytics') return;
 
     let cancelled = false;
     setAnalyticsLoading(true);
@@ -113,10 +113,10 @@ export default function AppPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, isAdmin, analyticsRefreshKey]);
+  }, [activeTab, analyticsRefreshKey]);
 
   useEffect(() => {
-    if (activeTab !== 'inventory' || !isAdmin) return;
+    if (activeTab !== 'inventory') return;
 
     let cancelled = false;
     api.processExpiredBatches()
@@ -133,12 +133,7 @@ export default function AppPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeTab, isAdmin]);
-
-  const handleCheckout = async (payload: CheckoutPayload) => {
-    await api.processCheckout(payload);
-    await loadData();
-  };
+  }, [activeTab]);
 
   const handleAddProduct = async (product: NewProductInput) => {
     await api.addProduct(product);
@@ -155,31 +150,20 @@ export default function AppPage() {
     await loadData();
   };
 
-  const posProducts: ProductInventorySummary[] = inventory.length > 0
-    ? inventory
-    : products.map((product) => ({
-        ...product,
-        available_quantity: product.stock_quantity,
-        expired_quantity: 0,
-        near_expiry_count: 0,
-        earliest_expiry_date: null,
-        has_expired_batches: false,
-        expires_soon: false,
-      }));
+  // Save the new roles, then re-read them so the table shows what the
+  // database actually stored. If you just changed your own roles, update
+  // your "Switch role" options too.
+  const handleSaveRoles = async (userId: string, roles: AppRole[]) => {
+    await api.setUserRoles(userId, roles);
+    setStaffRoles(await api.getStaffRoles());
+    if (userId === user?.id) refreshRoles();
+  };
 
   return (
     <div className="app-container">
-      <header className="app-header">
-        <span className="user-info">
-          Signed in as <strong>{user?.email}</strong>
-          {isAdmin && <span className="admin-badge">Admin</span>}
-        </span>
-        <button className="signout-btn" onClick={signOut}>
-          Sign out
-        </button>
-      </header>
+      <AppHeader role="admin" />
 
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Navbar tabs={ADMIN_TABS} activeTab={activeTab} setActiveTab={setActiveTab} />
 
       <main className="content">
         {loading ? (
@@ -190,12 +174,13 @@ export default function AppPage() {
           <>
             {activeTab === 'pos' && (
               <POS
+                mode="staff"
                 products={posProducts}
                 customers={customers}
                 onCheckout={handleCheckout}
               />
             )}
-            {activeTab === 'inventory' && isAdmin && (
+            {activeTab === 'inventory' && (
               <Inventory
                 products={products}
                 inventory={inventory}
@@ -206,14 +191,14 @@ export default function AppPage() {
                 onRefresh={loadData}
               />
             )}
-            {activeTab === 'loyalty' && isAdmin && (
+            {activeTab === 'loyalty' && (
               <Loyalty
                 customers={customers}
                 logs={logs}
                 onRefresh={loadData}
               />
             )}
-            {activeTab === 'analytics' && isAdmin && (
+            {activeTab === 'analytics' && (
               <Suspense fallback={<div className="tab-content">Loading analytics…</div>}>
                 <Analytics
                   analytics={analytics}
@@ -222,6 +207,13 @@ export default function AppPage() {
                   onRetry={() => setAnalyticsRefreshKey((key) => key + 1)}
                 />
               </Suspense>
+            )}
+            {activeTab === 'users' && (
+              <UserRoles
+                users={customers}
+                staffRoles={staffRoles}
+                onSaveRoles={handleSaveRoles}
+              />
             )}
           </>
         )}
