@@ -120,7 +120,15 @@ export default function ProductDetails({
         <dl className="product-details-facts">
           <div>
             <dt>In stock</dt>
-            <dd>{product.stock_quantity}</dd>
+            <dd>
+              {product.stock_quantity}
+              {/* e.g. "13 in 2 batches"; the list below has each batch's count. */}
+              {hasBatches && (
+                <small className="facts-sub">
+                  {' '}in {batches.length} batch{batches.length === 1 ? '' : 'es'}
+                </small>
+              )}
+            </dd>
           </div>
           <div>
             <dt>In basket</dt>

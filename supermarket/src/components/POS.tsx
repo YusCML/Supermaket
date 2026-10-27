@@ -6,6 +6,7 @@ import { formatExpiry, isNearExpiry, sellableBatches } from '../lib/expiry';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotify } from '../contexts/NotifyContext';
 import ProductDetails from './ProductDetails';
+import BatchBreakdown from './BatchBreakdown';
 
 interface POSProps {
   products: ProductInventorySummary[];
@@ -458,6 +459,9 @@ export default function POS({ products = [], customers = [], batches = [], onChe
                   <p>₱{(p.price || 0).toFixed(2)}</p>
                 )}
                 <small>Stock: {p.stock_quantity}</small>
+                {/* Staff see how the stock splits across batches (customers
+                    don't get batches, so nothing shows at self-serve). */}
+                <BatchBreakdown batches={sellableBatchesOf(p.id)} />
                 {p.near_expiry_count > 0 && (
                   <div>
                     <span className="badge badge-sale">

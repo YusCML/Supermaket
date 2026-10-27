@@ -1,8 +1,9 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import type { NewProductInput, Product, ProductBatch, ProductInventorySummary, ReceiveStockInput } from '../types/app';
 import { useNotify } from '../contexts/NotifyContext';
-import { formatExpiry } from '../lib/expiry';
+import { formatExpiry, sellableBatches } from '../lib/expiry';
 import { NEAR_EXPIRY_PERCENT_OFF } from '../lib/pricing';
+import BatchBreakdown from './BatchBreakdown';
 
 interface InventoryProps {
   products: Product[];
@@ -193,7 +194,13 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
                 <td><strong>{p.name}</strong></td>
                 <td>{p.category}</td>
                 <td>₱{p.price.toFixed(2)}</td>
-                <td>{summary.available_quantity}</td>
+                <td>
+                  {summary.available_quantity}
+                  {/* How that total splits across batches, e.g. 13 = B-3: 10 + B-1: 3. */}
+                  <BatchBreakdown
+                    batches={sellableBatches(batches.filter((batch) => batch.product_id === p.id))}
+                  />
+                </td>
                 <td>
                   {formatExpiry(summary.earliest_expiry_date)}
                   {summary.near_expiry_count > 0 && (

@@ -1078,3 +1078,34 @@
 .batch-row small {
   color: #64748b;
 }
+
+/* Stock split by batch, e.g. "B-3: 10" "B-1: 3" (Inventory, POS cards) */
+.batch-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.3rem;
+}
+
+.batch-chip {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.batch-chip.is-near-expiry {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.facts-sub {
+  font-weight: 400;
+  color: #64748b;
+}
