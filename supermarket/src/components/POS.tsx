@@ -7,6 +7,11 @@ interface POSProps {
   products: ProductInventorySummary[];
   customers: Customer[];
   onCheckout: (payload: CheckoutPayload) => Promise<void>;
+  // 'self-serve': a customer buying for themselves. The sale always goes on
+  //   their own loyalty account, so there's no member lookup at all.
+  // 'staff': a cashier or admin at the till. They look the customer up by
+  //   loyalty ID / phone / email, or leave the box empty for a walk-in.
+  mode?: 'self-serve' | 'staff';
 }
 
 // Does this member match what was typed in the member box? Phone number,
@@ -23,20 +28,21 @@ function matchesMember(c: Customer, query: string): boolean {
   );
 }
 
-export default function POS({ products = [], customers = [], onCheckout }: POSProps) {
+export default function POS({ products = [], customers = [], onCheckout, mode = 'staff' }: POSProps) {
   const { user } = useAuth();
+  const isSelfServe = mode === 'self-serve';
 
-  // Everyone who logs in is a loyalty member too, so by default a sale goes on
-  // the logged-in person's own account: their loyalty ID is already filled in
-  // and selected. If someone else is buying, type their loyalty ID instead.
-  // Clear the box for a walk-in (no member, no points).
+  // Who the sale goes on when the screen opens (and again after each sale).
+  // At self-serve that's always you: everyone who logs in is a loyalty member.
+  // At the till it starts empty: the cashier is serving someone else, so they
+  // look that customer up. Left empty, it's a walk-in (no member, no points).
   const me = customers.find((c) => c.id === user?.id) ?? null;
-  const myMemberCode = me?.loyalty_id ?? me?.email ?? '';
+  const startingMember = isSelfServe ? me : null;
 
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [phoneSearch, setPhoneSearch] = useState(myMemberCode);
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(me);
+  const [phoneSearch, setPhoneSearch] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(startingMember);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'Loyalty Points'>('Cash');
 
@@ -152,6 +158,12 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
     if (isSubmitting.current) return;
     if (cart.length === 0) return alert('Cart is empty!');
 
+    // Self-serve sales must go on your own account (the database insists). If
+    // your loyalty profile didn't load, say so instead of a confusing error.
+    if (isSelfServe && !selectedCustomer) {
+      return alert("We couldn't load your loyalty account. Please sign out and sign back in.");
+    }
+
     // Whoever's ID is in the member box is who gets the points. If the cashier
     // typed a different ID but never pressed Lookup, catch it here so the
     // points don't land on the wrong account. We switch to that member and
@@ -191,10 +203,11 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
       });
       alert('Checkout completed successfully!');
       setCart([]);
-      // Back to the default for the next sale: the logged-in person's account.
-      setSelectedCustomer(me);
+      // Back to the start for the next sale: your own account at self-serve,
+      // an empty member box at the till.
+      setSelectedCustomer(startingMember);
       setPointsToRedeem(0);
-      setPhoneSearch(myMemberCode);
+      setPhoneSearch('');
     } catch (err) {
       // Messages like "Not enough stock for ..." come straight from the database.
       alert(err instanceof Error ? err.message : 'Checkout failed');
@@ -242,18 +255,22 @@ export default function POS({ products = [], customers = [], onCheckout }: POSPr
       <div className="pos-right">
         <h2>Active Basket</h2>
 
-        <div className="customer-panel">
-          <input
-            placeholder="Phone Number / Customer ID"
-            value={phoneSearch}
-            onChange={(e) => handleMemberInput(e.target.value)}
-            // Enter (or scanning a loyalty card) looks the member up, same as the button.
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') findCustomer();
-            }}
-          />
-          <button onClick={findCustomer}>Lookup Member</button>
-        </div>
+        {/* Self-serve shoppers can't put the sale on someone else's account,
+            so they don't get the lookup box. */}
+        {!isSelfServe && (
+          <div className="customer-panel">
+            <input
+              placeholder="Phone Number / Customer ID"
+              value={phoneSearch}
+              onChange={(e) => handleMemberInput(e.target.value)}
+              // Enter (or scanning a loyalty card) looks the member up, same as the button.
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') findCustomer();
+              }}
+            />
+            <button onClick={findCustomer}>Lookup Member</button>
+          </div>
+        )}
 
         {selectedCustomer && (
           <div className="member-info">
