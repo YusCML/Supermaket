@@ -2,6 +2,7 @@ import { useRef, useState, type KeyboardEvent } from 'react';
 import type { ProductInventorySummary, Customer, CartItem, CheckoutPayload } from '../types/app';
 import { discountForPoints, maxRedeemablePoints, roundToCentavos } from '../lib/loyalty';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotify } from '../contexts/NotifyContext';
 
 interface POSProps {
   products: ProductInventorySummary[];
@@ -43,6 +44,7 @@ const MAX_MEMBER_SUGGESTIONS = 6;
 
 export default function POS({ products = [], customers = [], onCheckout, mode = 'staff' }: POSProps) {
   const { user } = useAuth();
+  const { notify } = useNotify();
   const isSelfServe = mode === 'self-serve';
 
   // Who the sale goes on when the screen opens (and again after each sale).
@@ -83,8 +85,8 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
   const addToCart = (product: ProductInventorySummary) => {
     const alreadyInCart = cart.find((item) => item.id === product.id)?.quantity ?? 0;
 
-    if (product.stock_quantity <= 0) return alert('Item is out of stock!');
-    if (alreadyInCart >= product.stock_quantity) return alert('Cannot exceed available stock!');
+    if (product.stock_quantity <= 0) return notify('Item is out of stock!', 'error');
+    if (alreadyInCart >= product.stock_quantity) return notify('Cannot exceed available stock!', 'error');
 
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
@@ -141,7 +143,7 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
     if (!match) {
       // Only speak up when it looks like a scanned code. For a name search the
       // grid already shows what matched.
-      if (/^\d+$/.test(code)) alert(`No product found with barcode ${code}`);
+      if (/^\d+$/.test(code)) notify(`No product found with barcode ${code}`, 'error');
       return;
     }
 
@@ -196,7 +198,7 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
       // Several people fit (e.g. two "Bryan"s). Let the cashier pick from the list.
       setShowSuggestions(true);
     } else {
-      alert('Customer not found!');
+      notify('Customer not found!', 'error');
     }
   };
 
@@ -244,12 +246,12 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
 
   const handleCheckoutSubmit = async () => {
     if (isSubmitting.current) return;
-    if (cart.length === 0) return alert('Cart is empty!');
+    if (cart.length === 0) return notify('Cart is empty!', 'error');
 
     // Self-serve sales must go on your own account (the database insists). If
     // your loyalty profile didn't load, say so instead of a confusing error.
     if (isSelfServe && !selectedCustomer) {
-      return alert("We couldn't load your loyalty account. Please sign out and sign back in.");
+      return notify("We couldn't load your loyalty account. Please sign out and sign back in.", 'error');
     }
 
     // Whoever's ID is in the member box is who gets the points. If the cashier
@@ -259,11 +261,12 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
     const memberQuery = phoneSearch.trim();
     if (memberQuery && !(selectedCustomer && matchesMember(selectedCustomer, memberQuery))) {
       const typedMember = customers.find((c) => matchesMember(c, memberQuery));
-      if (!typedMember) return alert('Customer not found!');
+      if (!typedMember) return notify('Customer not found!', 'error');
       setSelectedCustomer(typedMember);
       setPointsToRedeem(0);
-      return alert(
-        `Member changed to ${typedMember.name || typedMember.email}. Check the total, then press Complete Transaction again.`
+      return notify(
+        `Member changed to ${typedMember.name || typedMember.email}. Check the total, then press Complete Transaction again.`,
+        'info'
       );
     }
 
@@ -272,11 +275,12 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
     // The database checks this too. Catching it here just saves a round trip.
     if (paymentMethod === 'Loyalty Points') {
       if (!selectedCustomer) {
-        return alert('Look up a member first to pay with loyalty points.');
+        return notify('Look up a member first to pay with loyalty points.', 'error');
       }
       if (finalTotal > 0) {
-        return alert(
-          `Not enough points redeemed to cover the bill. ₱${finalTotal.toFixed(2)} is still due.`
+        return notify(
+          `Not enough points redeemed to cover the bill. ₱${finalTotal.toFixed(2)} is still due.`,
+          'error'
         );
       }
     }
@@ -289,7 +293,7 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
         pointsToRedeem: pointsApplied,
         paymentMethod,
       });
-      alert('Checkout completed successfully!');
+      notify('Checkout completed successfully!', 'success');
       setCart([]);
       // Back to the start for the next sale: your own account at self-serve,
       // an empty member box at the till.
@@ -298,7 +302,7 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
       setPhoneSearch('');
     } catch (err) {
       // Messages like "Not enough stock for ..." come straight from the database.
-      alert(err instanceof Error ? err.message : 'Checkout failed');
+      notify(err instanceof Error ? err.message : 'Checkout failed', 'error');
     } finally {
       isSubmitting.current = false;
     }
@@ -353,7 +357,11 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
           <div className="customer-panel">
             <div className="member-search">
               <input
-                placeholder="Name, loyalty ID, phone or email"
+                // Chrome reads the hint text to guess what a box is for. Words
+                // like "email" or "phone" make it pop up its own saved-address
+                // list (even with autoComplete off), so the hint avoids them.
+                // The search still matches names, loyalty IDs, phones and emails.
+                placeholder="Search member or scan loyalty card"
                 value={phoneSearch}
                 onChange={(e) => handleMemberInput(e.target.value)}
                 onFocus={() => setShowSuggestions(true)}

@@ -805,3 +805,121 @@
   text-align: center;
   font-weight: 600;
 }
+
+/* App notifications (replace the browser's "localhost says..." alerts) */
+.notice-stack {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(360px, calc(100vw - 2rem));
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.75rem 0.75rem 0.75rem 0.9rem;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #2563eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15);
+  font-size: 0.9rem;
+  animation: notice-in 0.18s ease-out;
+}
+
+.notice-success { border-left-color: #16a34a; }
+.notice-error   { border-left-color: #dc2626; }
+.notice-info    { border-left-color: #2563eb; }
+
+.notice-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.notice-success .notice-icon { background: #16a34a; }
+.notice-error .notice-icon   { background: #dc2626; }
+.notice-info .notice-icon    { background: #2563eb; }
+
+.notice-message {
+  flex: 1;
+  line-height: 1.35;
+}
+
+.notice-close {
+  flex: none;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.notice-close:hover {
+  color: #475569;
+}
+
+@keyframes notice-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* App confirmation dialog (replaces the browser's confirm box) */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.45);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.confirm-dialog {
+  width: 100%;
+  max-width: 400px;
+  padding: 1.5rem;
+  background: #fff;
+  color: #1e293b;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.confirm-dialog h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.confirm-dialog p {
+  margin: 0 0 1.25rem;
+  color: #475569;
+  line-height: 1.4;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.confirm-actions button {
+  padding: 0.55rem 1rem;
+  font-size: 0.95rem;
+}

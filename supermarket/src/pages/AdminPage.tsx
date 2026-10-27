@@ -7,6 +7,7 @@ import Navbar, { type NavTab } from '../components/Navbar';
 import AppHeader from '../components/AppHeader';
 import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotify } from '../contexts/NotifyContext';
 import { useStoreData } from '../hooks/useStoreData';
 import type {
   AppRole,
@@ -33,6 +34,7 @@ const ADMIN_TABS: NavTab<AdminTab>[] = [
 // The database still checks every admin action on its own.
 export default function AdminPage() {
   const { user, refreshRoles } = useAuth();
+  const { notify } = useNotify();
   const {
     products,
     inventory,
@@ -126,7 +128,7 @@ export default function AdminPage() {
       .catch((err) => {
         if (!cancelled) {
           console.error('Could not process expired inventory on page load:', err);
-          alert(err instanceof Error ? err.message : 'Could not process expired inventory');
+          notify(err instanceof Error ? err.message : 'Could not process expired inventory', 'error');
         }
       });
 
