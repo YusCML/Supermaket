@@ -629,3 +629,14 @@
   color: #1e40af;
   vertical-align: middle;
 }
+
+/* Cashier's read-only stock screen */
+.read-only-note {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+}
