@@ -5,9 +5,14 @@ interface InventoryProps {
   products: Product[];
   inventory: ProductInventorySummary[];
   batches: ProductBatch[];
-  onAddProduct: (product: NewProductInput) => Promise<void>;
-  onReceiveStock: (input: ReceiveStockInput) => Promise<void>;
-  onProcessExpired: () => Promise<void>;
+  // Cashiers get this screen read-only: they can check stock levels, expiry
+  // dates and batches, but only admins add products or restock. The database
+  // enforces that too; hiding the forms just keeps cashiers from hitting errors.
+  readOnly?: boolean;
+  // Admin actions. Not needed (and not passed) when readOnly is on.
+  onAddProduct?: (product: NewProductInput) => Promise<void>;
+  onReceiveStock?: (input: ReceiveStockInput) => Promise<void>;
+  onProcessExpired?: () => Promise<void>;
   onRefresh?: () => void;
 }
 
@@ -62,6 +67,7 @@ export default function Inventory({
   onProcessExpired,
   onRefresh,
 }: InventoryProps) {
+export default function Inventory({ products, inventory, batches, readOnly = false, onAddProduct, onReceiveStock, onProcessExpired, onRefresh }: InventoryProps) {
   const [form, setForm] = useState(emptyForm);
   const [receiveForm, setReceiveForm] = useState(emptyReceive);
   const [processingExpired, setProcessingExpired] = useState(false);
@@ -290,6 +296,57 @@ export default function Inventory({
             Refresh
           </button>
         )}
+    <div className="tab-content">
+      <h2>Catalog & Stock Control</h2>
+
+      {readOnly && (
+        <p className="read-only-note">
+          View only. Adding products and restocking are done by an admin.
+        </p>
+      )}
+
+      {!readOnly && (
+        <>
+          <form className="form-card" onSubmit={handleSubmit}>
+            <h3>Add New Product</h3>
+            <div className="form-grid">
+              <input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} required />
+              <input placeholder="Barcode" value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} required />
+              <input placeholder="Product Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              <input placeholder="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} required />
+              <input placeholder="Price (₱)" type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
+              <input placeholder="Cost (₱)" type="number" step="0.01" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} required />
+              <input placeholder="Stock Quantity" type="number" value={form.stock_quantity} onChange={(e) => setForm({ ...form, stock_quantity: e.target.value })} required />
+              <input placeholder="Reorder Level" type="number" value={form.reorder_level} onChange={(e) => setForm({ ...form, reorder_level: e.target.value })} required />
+            </div>
+            <button type="submit" className="btn-primary">Save Product</button>
+          </form>
+
+          <form className="form-card" onSubmit={handleReceive}>
+            <h3>Receive Stock by Batch</h3>
+            <div className="form-grid">
+              <select value={receiveForm.product_id} onChange={(e) => setReceiveForm({ ...receiveForm, product_id: e.target.value })} required>
+                <option value="">Select product</option>
+                {products.map((product) => (
+                  <option key={product.id} value={product.id}>{product.name}</option>
+                ))}
+              </select>
+              <input type="number" min="1" placeholder="Batch quantity" value={receiveForm.quantity} onChange={(e) => setReceiveForm({ ...receiveForm, quantity: e.target.value })} required />
+              <input type="date" value={receiveForm.expiry_date} onChange={(e) => setReceiveForm({ ...receiveForm, expiry_date: e.target.value })} required />
+              <input placeholder="Optional batch code" value={receiveForm.batch_code} onChange={(e) => setReceiveForm({ ...receiveForm, batch_code: e.target.value })} />
+            </div>
+            <button type="submit" className="btn-primary">Receive Stock</button>
+          </form>
+        </>
+      )}
+
+      <div className="inventory-toolbar">
+        {!readOnly && (
+          <button className="btn-primary" onClick={handleProcessExpired} disabled={processingExpired}>
+            {processingExpired ? 'Processing…' : 'Process expired stock'}
+          </button>
+        )}
+        {onRefresh && <button className="btn-secondary" onClick={onRefresh}>Refresh</button>}
       </div>
 
       {/* Inventory Data Table */}

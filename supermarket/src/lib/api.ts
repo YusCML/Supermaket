@@ -1,5 +1,6 @@
 ﻿import { supabase } from './supabase';
 import type {
+  AppRole,
   Product,
   ProductBatch,
   Customer,
@@ -102,6 +103,50 @@ export const api = {
       loyalty_points: row.loyalty_points ?? 0,
       created_at: row.users?.created_at ?? undefined,
     })) as Customer[];
+  },
+
+  // Admin only: who holds which staff role, as { userId: ['cashier', 'admin'] }.
+  // A person is a cashier / admin when they have a row in that table.
+  // Customer isn't listed because everyone is one.
+  async getStaffRoles(): Promise<Record<string, AppRole[]>> {
+    const [cashiers, admins] = await Promise.all([
+      supabase.from('cashier').select('user_id'),
+      supabase.from('admin').select('user_id'),
+    ]);
+    if (cashiers.error) throw cashiers.error;
+    if (admins.error) throw admins.error;
+
+    const staffRoles: Record<string, AppRole[]> = {};
+    const add = (userId: string, role: AppRole) => {
+      if (!staffRoles[userId]) staffRoles[userId] = [];
+      staffRoles[userId].push(role);
+    };
+    for (const row of cashiers.data ?? []) add(row.user_id, 'cashier');
+    for (const row of admins.data ?? []) add(row.user_id, 'admin');
+    return staffRoles;
+  },
+
+  // Admin only: give someone exactly these roles, e.g. ['customer', 'cashier']
+  // (the Users & Roles tab). The database checks the caller is an admin and
+  // won't let admins remove their own admin role, so the store always keeps
+  // at least one (see set_user_roles in the role_interfaces_and_self_checkout
+  // migration). Customer is always kept, whatever is sent.
+  async setUserRoles(userId: string, roles: AppRole[]): Promise<void> {
+    const { error } = await supabase.rpc('set_user_roles', {
+      p_user_id: userId,
+      p_roles: roles,
+    });
+    if (error) {
+      // PGRST202 = the database doesn't have this function yet, i.e. the
+      // migration hasn't been run. Say that instead of a cryptic error.
+      if (error.code === 'PGRST202') {
+        throw new Error(
+          'Role changes need a database update that hasn\'t been applied yet ' +
+            '(migration 20261027120000_role_interfaces_and_self_checkout.sql).'
+        );
+      }
+      throw error;
+    }
   },
 
   // The points log, newest first. Admin only: for anyone else the database
