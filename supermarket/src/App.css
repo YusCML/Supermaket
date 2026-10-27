@@ -782,3 +782,26 @@
 .member-suggestion-empty {
   padding: 0.5rem 0.75rem;
 }
+
+/* POS: − / + quantity buttons on each basket line */
+.qty-control {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.3rem;
+}
+
+.qty-control .btn-sm {
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-right: 0;
+  padding: 0;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.qty-value {
+  min-width: 1.5rem;
+  text-align: center;
+  font-weight: 600;
+}

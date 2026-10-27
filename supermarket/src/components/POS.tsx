@@ -101,6 +101,28 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
+  // How many of this product are on the shelf right now. Read from the product
+  // list (not the basket copy) so it reflects the latest stock.
+  const stockOf = (id: number) =>
+    products.find((p) => p.id === id)?.stock_quantity ?? 0;
+
+  // The + button in the basket. Same as clicking the product again, so the
+  // stock check lives in one place (addToCart).
+  const increaseQuantity = (id: number) => {
+    const product = products.find((p) => p.id === id);
+    if (product) addToCart(product);
+  };
+
+  // The − button. Stops at 1; the × button is for taking an item out
+  // completely, so a quick double-tap on − can't remove it by accident.
+  const decreaseQuantity = (id: number) => {
+    setCart((prev) =>
+      prev.map((item) =>
+        item.id === id && item.quantity > 1 ? { ...item, quantity: item.quantity - 1 } : item
+      )
+    );
+  };
+
   // A barcode scanner acts like a keyboard: it types the code into the search
   // box and presses Enter. So on Enter we find the product with that exact
   // barcode (or SKU) and put it straight into the basket, then clear the box
@@ -295,6 +317,10 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleScan();
           }}
+          // No browser pop-up of old searches covering the product grid, and no
+          // red spell-check lines under barcodes.
+          autoComplete="off"
+          spellCheck={false}
         />
         <div className="product-grid">
           {filteredProducts.length === 0 ? (
@@ -334,7 +360,9 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
                 onBlur={() => setShowSuggestions(false)}
                 // Enter (or scanning a loyalty card) looks the member up, same as the button.
                 onKeyDown={handleMemberKeyDown}
+                // Our own suggestion list replaces the browser's, so turn that off.
                 autoComplete="off"
+                spellCheck={false}
                 role="combobox"
                 aria-autocomplete="list"
                 aria-expanded={suggestionsOpen}
@@ -391,6 +419,7 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
                   min="0"
                   value={pointsApplied}
                   onChange={(e) => handlePointsChange(e.target.value)}
+                  autoComplete="off"
                 />
               </div>
             )}
@@ -405,7 +434,26 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
               <div key={item.id} className="cart-item">
                 <div>
                   <strong>{item.name}</strong>
-                  <small> x{item.quantity}</small>
+                  <div className="qty-control">
+                    <button
+                      className="btn-sm"
+                      onClick={() => decreaseQuantity(item.id)}
+                      disabled={item.quantity <= 1}
+                      aria-label={`One less ${item.name}`}
+                    >
+                      −
+                    </button>
+                    <span className="qty-value">{item.quantity}</span>
+                    <button
+                      className="btn-sm"
+                      onClick={() => increaseQuantity(item.id)}
+                      // Greyed out once the basket holds everything on the shelf.
+                      disabled={item.quantity >= stockOf(item.id)}
+                      aria-label={`One more ${item.name}`}
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <span>₱{((item.price || 0) * item.quantity).toFixed(2)} </span>
