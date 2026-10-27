@@ -736,3 +736,49 @@
 .role-actions {
   white-space: nowrap;
 }
+
+/* POS: member suggestions under the member box */
+.member-search {
+  position: relative;
+  flex: 1;
+  display: flex;
+}
+
+.member-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.member-suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+}
+
+.member-suggestion.is-active {
+  background: #eff6ff;
+}
+
+.member-suggestion small,
+.member-suggestion-empty {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.member-suggestion-empty {
+  padding: 0.5rem 0.75rem;
+}

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type KeyboardEvent } from 'react';
 import type { ProductInventorySummary, Customer, CartItem, CheckoutPayload } from '../types/app';
 import { discountForPoints, maxRedeemablePoints, roundToCentavos } from '../lib/loyalty';
 import { useAuth } from '../contexts/AuthContext';
@@ -28,6 +28,19 @@ function matchesMember(c: Customer, query: string): boolean {
   );
 }
 
+// Does the member contain what's been typed so far? Used for the suggestion
+// list under the member box, so partial text is enough: part of a name,
+// email, phone number or loyalty ID.
+function memberContains(c: Customer, query: string): boolean {
+  const lowered = query.toLowerCase();
+  return [c.name, c.email, c.phone, c.loyalty_id].some((field) =>
+    (field || '').toLowerCase().includes(lowered)
+  );
+}
+
+// How many suggestions to show under the member box at once.
+const MAX_MEMBER_SUGGESTIONS = 6;
+
 export default function POS({ products = [], customers = [], onCheckout, mode = 'staff' }: POSProps) {
   const { user } = useAuth();
   const isSelfServe = mode === 'self-serve';
@@ -45,6 +58,10 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(startingMember);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'Loyalty Points'>('Cash');
+  // The member suggestion list: whether it's open, and which row the arrow
+  // keys have highlighted (-1 = none).
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [highlighted, setHighlighted] = useState(-1);
 
   // Stops a double-click on "Complete Transaction" from saving the sale twice.
   // A ref (not state) because it has to flip instantly, before React re-renders.
@@ -110,25 +127,74 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
     setSearch('');
   };
 
+  // Suggestions only make sense while someone is still searching. Once the box
+  // holds the member we've already picked, there's nothing left to suggest.
+  const lookupText = phoneSearch.trim();
+  const isSearchingMember =
+    lookupText !== '' && !(selectedCustomer && matchesMember(selectedCustomer, lookupText));
+  const memberSuggestions = isSearchingMember
+    ? customers.filter((c) => memberContains(c, lookupText)).slice(0, MAX_MEMBER_SUGGESTIONS)
+    : [];
+  const suggestionsOpen = showSuggestions && isSearchingMember;
+
   // Clearing the member box turns the sale into a walk-in: no member, no points.
   const handleMemberInput = (value: string) => {
     setPhoneSearch(value);
+    setShowSuggestions(true);
+    setHighlighted(-1);
     if (!value.trim()) {
       setSelectedCustomer(null);
       setPointsToRedeem(0);
     }
   };
 
+  // Picks a member, from the suggestion list or an exact lookup. The box is
+  // filled with their loyalty ID (or email), which is what the checkout checks
+  // to make sure the points go to the right person.
+  const selectMember = (cust: Customer) => {
+    setSelectedCustomer(cust);
+    setPhoneSearch(cust.loyalty_id || cust.email || String(cust.id));
+    // Points typed in for the previous member shouldn't carry over.
+    setPointsToRedeem(0);
+    setShowSuggestions(false);
+    setHighlighted(-1);
+  };
+
   const findCustomer = () => {
-    const query = phoneSearch.trim();
-    if (!query) return;
-    const cust = customers.find((c) => matchesMember(c, query));
+    if (!lookupText) return;
+    // An exact phone / loyalty ID / email first: that's what a scanned loyalty
+    // card gives us. Otherwise, if what was typed only fits one member, take them.
+    const cust =
+      customers.find((c) => matchesMember(c, lookupText)) ??
+      (memberSuggestions.length === 1 ? memberSuggestions[0] : undefined);
+
     if (cust) {
-      setSelectedCustomer(cust);
-      // Points typed in for the previous member shouldn't carry over.
-      setPointsToRedeem(0);
+      selectMember(cust);
+    } else if (memberSuggestions.length > 1) {
+      // Several people fit (e.g. two "Bryan"s). Let the cashier pick from the list.
+      setShowSuggestions(true);
     } else {
       alert('Customer not found!');
+    }
+  };
+
+  // Keyboard for the member box: ↑/↓ move through the suggestions, Enter picks
+  // the highlighted one (or does a normal lookup), Esc closes the list.
+  const handleMemberKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    const canMove = suggestionsOpen && memberSuggestions.length > 0;
+
+    if (e.key === 'ArrowDown' && canMove) {
+      e.preventDefault();
+      setHighlighted((i) => (i + 1) % memberSuggestions.length);
+    } else if (e.key === 'ArrowUp' && canMove) {
+      e.preventDefault();
+      setHighlighted((i) => (i <= 0 ? memberSuggestions.length - 1 : i - 1));
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+    } else if (e.key === 'Enter') {
+      const picked = canMove ? memberSuggestions[highlighted] : undefined;
+      if (picked) selectMember(picked);
+      else findCustomer();
     }
   };
 
@@ -259,15 +325,55 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
             so they don't get the lookup box. */}
         {!isSelfServe && (
           <div className="customer-panel">
-            <input
-              placeholder="Phone Number / Customer ID"
-              value={phoneSearch}
-              onChange={(e) => handleMemberInput(e.target.value)}
-              // Enter (or scanning a loyalty card) looks the member up, same as the button.
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') findCustomer();
-              }}
-            />
+            <div className="member-search">
+              <input
+                placeholder="Name, loyalty ID, phone or email"
+                value={phoneSearch}
+                onChange={(e) => handleMemberInput(e.target.value)}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setShowSuggestions(false)}
+                // Enter (or scanning a loyalty card) looks the member up, same as the button.
+                onKeyDown={handleMemberKeyDown}
+                autoComplete="off"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={suggestionsOpen}
+                aria-controls="member-suggestions"
+              />
+
+              {suggestionsOpen && (
+                <ul className="member-suggestions" id="member-suggestions" role="listbox">
+                  {memberSuggestions.length === 0 ? (
+                    <li className="member-suggestion-empty">No members match</li>
+                  ) : (
+                    memberSuggestions.map((c, index) => (
+                      <li
+                        key={c.id}
+                        role="option"
+                        aria-selected={index === highlighted}
+                        className={`member-suggestion${index === highlighted ? ' is-active' : ''}`}
+                        // onMouseDown rather than onClick: it fires before the box
+                        // loses focus, which would close the list first.
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          selectMember(c);
+                        }}
+                        onMouseEnter={() => setHighlighted(index)}
+                      >
+                        <strong>{c.name || c.email}</strong>
+                        <small>
+                          {/* Name falls back to the email, so don't show it twice. */}
+                          {[c.loyalty_id, c.phone, c.name !== c.email ? c.email : null]
+                            .filter(Boolean)
+                            .join(' · ')}
+                          {' · '}{c.loyalty_points ?? 0} pts
+                        </small>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              )}
+            </div>
             <button onClick={findCustomer}>Lookup Member</button>
           </div>
         )}
