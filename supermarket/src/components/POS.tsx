@@ -1,12 +1,17 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
-import type { ProductInventorySummary, Customer, CartItem, CheckoutPayload } from '../types/app';
+import type { ProductInventorySummary, ProductBatch, Customer, CartItem, CheckoutPayload } from '../types/app';
 import { discountForPoints, maxRedeemablePoints, roundToCentavos } from '../lib/loyalty';
+import { markedDownPrice, NEAR_EXPIRY_PERCENT_OFF, priceLine } from '../lib/pricing';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotify } from '../contexts/NotifyContext';
+import ProductDetails from './ProductDetails';
 
 interface POSProps {
   products: ProductInventorySummary[];
   customers: Customer[];
+  // Stock batches, shown in the product details window. Staff only; customers
+  // don't get batches, so at self-serve the window shows the summary instead.
+  batches?: ProductBatch[];
   onCheckout: (payload: CheckoutPayload) => Promise<void>;
   // 'self-serve': a customer buying for themselves. The sale always goes on
   //   their own loyalty account, so there's no member lookup at all.
@@ -42,7 +47,7 @@ function memberContains(c: Customer, query: string): boolean {
 // How many suggestions to show under the member box at once.
 const MAX_MEMBER_SUGGESTIONS = 6;
 
-export default function POS({ products = [], customers = [], onCheckout, mode = 'staff' }: POSProps) {
+export default function POS({ products = [], customers = [], batches = [], onCheckout, mode = 'staff' }: POSProps) {
   const { user } = useAuth();
   const { notify } = useNotify();
   const isSelfServe = mode === 'self-serve';
@@ -64,6 +69,8 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
   // keys have highlighted (-1 = none).
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [highlighted, setHighlighted] = useState(-1);
+  // The product whose details window is open (null = closed).
+  const [detailsProductId, setDetailsProductId] = useState<number | null>(null);
 
   // Stops a double-click on "Complete Transaction" from saving the sale twice.
   // A ref (not state) because it has to flip instantly, before React re-renders.
@@ -79,25 +86,35 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
     );
   });
 
-  // Clicking a product adds one to the basket. The stock checks happen out
+  // Puts `quantity` of a product in the basket (1 for a scan or the + button,
+  // whatever was chosen in the details window). The stock checks happen out
   // here rather than inside setCart, because React may run that callback twice
-  // in development (StrictMode), which would pop the alert twice.
-  const addToCart = (product: ProductInventorySummary) => {
+  // in development (StrictMode), which would show the message twice.
+  const addToCart = (product: ProductInventorySummary, quantity = 1) => {
     const alreadyInCart = cart.find((item) => item.id === product.id)?.quantity ?? 0;
 
     if (product.stock_quantity <= 0) return notify('Item is out of stock!', 'error');
-    if (alreadyInCart >= product.stock_quantity) return notify('Cannot exceed available stock!', 'error');
+    if (alreadyInCart + quantity > product.stock_quantity) return notify('Cannot exceed available stock!', 'error');
 
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
         return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.id === product.id ? { ...item, quantity: item.quantity + quantity } : item
         );
       }
-      return [...prev, { ...product, quantity: 1 }];
+      return [...prev, { ...product, quantity }];
     });
   };
+
+  // How many units of this product are near expiry (and so 15% off). Read
+  // from the product list so it reflects the latest stock.
+  const nearExpiryUnitsOf = (id: number) =>
+    products.find((p) => p.id === id)?.near_expiry_count ?? 0;
+
+  // Clicking a product opens its details window (price, expiry, batches) with
+  // an Add to basket button. Scanning a barcode still adds straight away.
+  const detailsProduct = products.find((p) => p.id === detailsProductId) ?? null;
 
   const removeFromCart = (id: number) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
@@ -226,9 +243,24 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
   // --- Bill math -------------------------------------------------------------
   // This is only a preview for the cashier. The database recalculates all of
   // it from the real prices when the sale is saved.
-  const total = roundToCentavos(
+  //
+  // Each line is priced with the near-expiry markdown: the units closest to
+  // expiring (sold first) are 15% off, the rest are full price.
+  const linePrices = new Map(
+    cart.map((item) => [
+      item.id,
+      priceLine(item.price || 0, item.quantity, nearExpiryUnitsOf(item.id)),
+    ])
+  );
+  // Before any discounts, what the near-expiry markdown takes off, and what's
+  // left (the bill that points can then be used on).
+  const fullPriceTotal = roundToCentavos(
     cart.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0)
   );
+  const nearExpirySavings = roundToCentavos(
+    cart.reduce((sum, item) => sum + (linePrices.get(item.id)?.savings ?? 0), 0)
+  );
+  const total = roundToCentavos(fullPriceTotal - nearExpirySavings);
 
   // The member can't use more points than they have, or more than the bill
   // needs. Clamping here (not only when typing) also covers the case where
@@ -336,14 +368,23 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
             <p className="no-products">No products found</p>
           ) : (
             filteredProducts.map((p) => (
-              <div key={p.id} className="product-card" onClick={() => addToCart(p)}>
+              <div key={p.id} className="product-card" onClick={() => setDetailsProductId(p.id)}>
                 <h4>{p.name}</h4>
-                <p>₱{(p.price || 0).toFixed(2)}</p>
+                {p.near_expiry_count > 0 ? (
+                  // Near-expiry stock: show the old price crossed out and the
+                  // 15% off price, so shoppers notice the deal.
+                  <p>
+                    <span className="price-old">₱{(p.price || 0).toFixed(2)}</span>{' '}
+                    <strong className="price-sale">₱{markedDownPrice(p.price || 0).toFixed(2)}</strong>
+                  </p>
+                ) : (
+                  <p>₱{(p.price || 0).toFixed(2)}</p>
+                )}
                 <small>Stock: {p.stock_quantity}</small>
-                {p.expires_soon && (
+                {p.near_expiry_count > 0 && (
                   <div>
-                    <span className="badge badge-warn">
-                      {p.near_expiry_count} nearing expiry
+                    <span className="badge badge-sale">
+                      {NEAR_EXPIRY_PERCENT_OFF}% off · {p.near_expiry_count} expiring soon
                     </span>
                   </div>
                 )}
@@ -469,10 +510,17 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
                   </div>
                 </div>
                 <div>
-                  <span>₱{((item.price || 0) * item.quantity).toFixed(2)} </span>
+                  <span>₱{(linePrices.get(item.id)?.total ?? 0).toFixed(2)} </span>
                   <button className="btn-sm btn-danger" onClick={() => removeFromCart(item.id)}>
                     ×
                   </button>
+                  {/* Say which units got the markdown, e.g. "2 × ₱80.75 (15% off)". */}
+                  {(linePrices.get(item.id)?.markedDownQty ?? 0) > 0 && (
+                    <div className="cart-markdown">
+                      {linePrices.get(item.id)!.markedDownQty} × ₱{markedDownPrice(item.price || 0).toFixed(2)}{' '}
+                      ({NEAR_EXPIRY_PERCENT_OFF}% off, near expiry)
+                    </div>
+                  )}
                 </div>
               </div>
             ))
@@ -480,8 +528,13 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
         </div>
 
         <div className="summary">
-          <div>Subtotal: ₱{total.toFixed(2)}</div>
-          <div>Discount: -₱{discount.toFixed(2)}</div>
+          <div>Subtotal: ₱{fullPriceTotal.toFixed(2)}</div>
+          {nearExpirySavings > 0 && (
+            <div className="summary-markdown">
+              Near-expiry {NEAR_EXPIRY_PERCENT_OFF}% off: -₱{nearExpirySavings.toFixed(2)}
+            </div>
+          )}
+          <div>Points discount: -₱{discount.toFixed(2)}</div>
           <h3>Total: ₱{finalTotal.toFixed(2)}</h3>
 
           <select
@@ -500,6 +553,19 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
           </button>
         </div>
       </div>
+
+      {detailsProduct && (
+        <ProductDetails
+          product={detailsProduct}
+          batches={batches.filter((b) => b.product_id === detailsProduct.id)}
+          inBasket={cart.find((item) => item.id === detailsProduct.id)?.quantity ?? 0}
+          onAdd={(quantity) => {
+            addToCart(detailsProduct, quantity);
+            setDetailsProductId(null);
+          }}
+          onClose={() => setDetailsProductId(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import type { NewProductInput, Product, ProductBatch, ProductInventorySummary, ReceiveStockInput } from '../types/app';
 import { useNotify } from '../contexts/NotifyContext';
+import { formatExpiry } from '../lib/expiry';
+import { NEAR_EXPIRY_PERCENT_OFF } from '../lib/pricing';
 
 interface InventoryProps {
   products: Product[];
@@ -34,30 +36,6 @@ const emptyReceive = {
   expiry_date: '',
   batch_code: '',
 };
-
-function phtToday() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Manila',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  return Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day));
-}
-
-function formatExpiry(expiryDate: string | null) {
-  if (!expiryDate) return 'No expiry date';
-  const [year, month, day] = expiryDate.split('-').map(Number);
-  const daysUntilExpiry = Math.floor(
-    (Date.UTC(year, month - 1, day) - phtToday()) / 86_400_000
-  );
-  if (daysUntilExpiry === 0) return 'Expired today';
-  if (daysUntilExpiry === 1) return 'Expires tomorrow';
-  if (daysUntilExpiry > 1 && daysUntilExpiry <= 7) return `Expires in ${daysUntilExpiry} days`;
-  if (daysUntilExpiry < 0) return `Expired ${Math.abs(daysUntilExpiry)} days ago`;
-  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString();
-}
 
 export default function Inventory({ products, inventory, batches, readOnly = false, onAddProduct, onReceiveStock, onProcessExpired, onRefresh }: InventoryProps) {
   const [form, setForm] = useState(emptyForm);
@@ -223,6 +201,7 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
                   {summary.near_expiry_count > 0 && (
                     <div className="expiry-note">
                       {summary.near_expiry_count} of {summary.available_quantity} stocks nearing expiry
+                      {` · ${NEAR_EXPIRY_PERCENT_OFF}% off at checkout`}
                     </div>
                   )}
                   <details className="batch-details">

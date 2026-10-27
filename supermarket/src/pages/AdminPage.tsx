@@ -179,6 +179,7 @@ export default function AdminPage() {
                 mode="staff"
                 products={posProducts}
                 customers={customers}
+                batches={batches}
                 onCheckout={handleCheckout}
               />
             )}

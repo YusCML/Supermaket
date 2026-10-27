@@ -15,8 +15,8 @@ import type {
 // customer, cashier and admin pages don't each repeat the same fetching code.
 //
 // `role` is the interface being used, and decides what gets fetched:
-//   customer -> products, and their own loyalty profile
-//   cashier  -> + stock levels, batches, and every member (for the lookup)
+//   customer -> products + stock levels/expiry, and their own loyalty profile
+//   cashier  -> + stock batches, and every member (for the lookup)
 //   admin    -> + the loyalty points log
 // Fetching more wouldn't leak anything (the database only returns what the
 // person may see), it would just be wasted requests.
@@ -41,7 +41,9 @@ export function useStoreData(role: AppRole) {
         api.getProducts(),
         api.getCustomers(),
         isAdmin ? api.getLoyaltyLogs() : Promise.resolve([] as LoyaltyLog[]),
-        isStaff ? api.getInventoryOverview() : Promise.resolve([] as ProductInventorySummary[]),
+        // Everyone gets the stock summary: customers need it at self-serve to
+        // see near-expiry markdowns and expiry dates.
+        api.getInventoryOverview(),
         isStaff ? api.getProductBatches() : Promise.resolve([] as ProductBatch[]),
       ]);
       setProducts(prodData);
@@ -70,9 +72,9 @@ export function useStoreData(role: AppRole) {
   };
 
   // The POS wants stock that excludes expired batches, which is what the
-  // inventory summary gives. Customers don't get that summary, so for them we
-  // fall back to the plain product list. The database still double-checks
-  // stock when the sale is saved.
+  // inventory summary gives. If that summary isn't available (e.g. the
+  // database hasn't been updated yet), fall back to the plain product list.
+  // The database still double-checks stock when the sale is saved.
   const posProducts: ProductInventorySummary[] = inventory.length > 0
     ? inventory
     : products.map((product) => ({
