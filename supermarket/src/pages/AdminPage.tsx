@@ -137,14 +137,18 @@ export default function AdminPage() {
     };
   }, [activeTab]);
 
+  // Both hand back what the database generated (the new product, with its
+  // barcode / the new batch code) so the Inventory screen can show it.
   const handleAddProduct = async (product: NewProductInput) => {
-    await api.addProduct(product);
+    const saved = await api.addProduct(product);
     await loadData();
+    return saved;
   };
 
   const handleReceiveStock = async (input: ReceiveStockInput) => {
-    await api.receiveStock(input);
+    const batchCode = await api.receiveStock(input);
     await loadData();
+    return batchCode;
   };
 
   const handleProcessExpired = async () => {

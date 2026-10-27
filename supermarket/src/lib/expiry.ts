@@ -1,4 +1,5 @@
 import { NEAR_EXPIRY_DAYS } from './pricing';
+import type { ProductBatch } from '../types/app';
 
 // Expiry helpers shared by the Inventory screen and the POS product details.
 // Dates are compared in Philippine time, the same as the database does.
@@ -28,6 +29,21 @@ export function isNearExpiry(expiryDate: string | null): boolean {
   if (!expiryDate) return false;
   const days = daysUntilExpiry(expiryDate);
   return days > 0 && days <= NEAR_EXPIRY_DAYS;
+}
+
+// The batches that can still be sold (active, some left, not expired), in the
+// order they're sold by default: soonest expiry first, no expiry date last,
+// then oldest batch first. Same rules as the database (consume_product_batches).
+export function sellableBatches(batches: ProductBatch[]): ProductBatch[] {
+  return batches
+    .filter((b) => b.status === 'active' && b.quantity_remaining > 0)
+    .filter((b) => !b.expiry_date || daysUntilExpiry(b.expiry_date) > 0)
+    .sort((a, b) => {
+      if (a.expiry_date === b.expiry_date) return a.id - b.id;
+      if (!a.expiry_date) return 1;
+      if (!b.expiry_date) return -1;
+      return a.expiry_date.localeCompare(b.expiry_date);
+    });
 }
 
 // A friendly label: "Expires tomorrow", "Expires in 3 days", "Expired 2 days ago"...

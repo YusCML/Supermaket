@@ -13,15 +13,18 @@ interface InventoryProps {
   // enforces that too; hiding the forms just keeps cashiers from hitting errors.
   readOnly?: boolean;
   // Admin actions. Not needed (and not passed) when readOnly is on.
-  onAddProduct?: (product: NewProductInput) => Promise<void>;
-  onReceiveStock?: (input: ReceiveStockInput) => Promise<void>;
+  // They return what the database generated: the saved product (with its
+  // barcode) and the new batch code.
+  onAddProduct?: (product: NewProductInput) => Promise<Product>;
+  onReceiveStock?: (input: ReceiveStockInput) => Promise<string>;
   onProcessExpired?: () => Promise<void>;
   onRefresh?: () => void;
 }
 
+// No barcode or batch code boxes: the database always generates both, and
+// keeps them unique.
 const emptyForm = {
   sku: '',
-  barcode: '',
   name: '',
   category: '',
   price: '',
@@ -34,7 +37,6 @@ const emptyReceive = {
   product_id: '',
   quantity: '',
   expiry_date: '',
-  batch_code: '',
 };
 
 export default function Inventory({ products, inventory, batches, readOnly = false, onAddProduct, onReceiveStock, onProcessExpired, onRefresh }: InventoryProps) {
@@ -51,9 +53,8 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      await onAddProduct({
+      const saved = await onAddProduct({
         sku: form.sku,
-        barcode: form.barcode,
         name: form.name,
         category: form.category,
         price: parseFloat(form.price),
@@ -62,7 +63,7 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
         reorder_level: parseInt(form.reorder_level, 10),
       });
       setForm(emptyForm);
-      notify(`${form.name} was added to the catalog.`, 'success');
+      notify(`${form.name} was added to the catalog with barcode ${saved?.barcode ?? '(assigned)'}.`, 'success');
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Could not save the product', 'error');
     }
@@ -76,14 +77,13 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
     }
 
     try {
-      await onReceiveStock({
+      const batchCode = await onReceiveStock({
         product_id: Number(receiveForm.product_id),
         quantity: Number(receiveForm.quantity),
         expiry_date: receiveForm.expiry_date,
-        batch_code: receiveForm.batch_code || undefined,
       });
       setReceiveForm(emptyReceive);
-      notify('Stock received.', 'success');
+      notify(batchCode ? `Stock received as batch ${batchCode}.` : 'Stock received.', 'success');
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Could not receive stock', 'error');
     }
@@ -120,7 +120,6 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
             <h3>Add New Product</h3>
             <div className="form-grid">
               <input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} required />
-              <input placeholder="Barcode" value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} required />
               <input placeholder="Product Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
               <input placeholder="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} required />
               <input placeholder="Price (₱)" type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
@@ -142,7 +141,6 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
               </select>
               <input type="number" min="1" placeholder="Batch quantity" value={receiveForm.quantity} onChange={(e) => setReceiveForm({ ...receiveForm, quantity: e.target.value })} required />
               <input type="date" value={receiveForm.expiry_date} onChange={(e) => setReceiveForm({ ...receiveForm, expiry_date: e.target.value })} required />
-              <input placeholder="Optional batch code" value={receiveForm.batch_code} onChange={(e) => setReceiveForm({ ...receiveForm, batch_code: e.target.value })} />
             </div>
             <button type="submit" className="btn-primary">Receive Stock</button>
           </form>

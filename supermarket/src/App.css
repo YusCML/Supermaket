@@ -1049,3 +1049,32 @@
   white-space: normal;
   line-height: 1.3;
 }
+
+/* Which batch a basket line comes from */
+.cart-batch {
+  margin-top: 0.1rem;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+/* Choosing a batch in the product details window */
+.batch-row {
+  cursor: pointer;
+}
+
+.batch-row:hover td {
+  background: #f8fafc;
+}
+
+.batch-row.is-selected td {
+  background: #eff6ff;
+}
+
+.batch-row.is-empty {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.batch-row small {
+  color: #64748b;
+}

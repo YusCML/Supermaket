@@ -5,36 +5,58 @@ import { markedDownPrice, NEAR_EXPIRY_DAYS, NEAR_EXPIRY_PERCENT_OFF } from '../l
 
 interface ProductDetailsProps {
   product: ProductInventorySummary;
-  // This product's batches. Staff only: customers can't see batches, so for
-  // them this is empty and the window shows the summary instead.
+  // This product's batches that can still be sold, soonest expiry first.
+  // Staff only: customers can't see batches, so at self-serve this is empty
+  // and the window shows the summary instead (the database picks the batch).
   batches: ProductBatch[];
-  // How many of it are already in the basket (so we don't offer more than the shelf has).
+  // How many of this product are already in the basket, in total and per batch,
+  // so we never offer more than the shelf (or the batch) has.
   inBasket: number;
-  onAdd: (quantity: number) => void;
+  inBasketForBatch: (batchId: number) => number;
+  // `batch` is the one picked in the list; undefined at self-serve.
+  onAdd: (quantity: number, batch?: ProductBatch) => void;
   onClose: () => void;
 }
 
 // The window that opens when a product is picked at checkout: price (and any
-// near-expiry markdown), stock, expiry dates and batches, plus Add to basket.
-export default function ProductDetails({ product, batches, inBasket, onAdd, onClose }: ProductDetailsProps) {
+// near-expiry markdown), stock, expiry dates, and a list of batches to choose
+// from, plus a quantity and Add to basket.
+export default function ProductDetails({
+  product,
+  batches,
+  inBasket,
+  inBasketForBatch,
+  onAdd,
+  onClose,
+}: ProductDetailsProps) {
+  // Units of a batch that aren't in the basket yet.
+  const freeIn = (batch: ProductBatch) => batch.quantity_remaining - inBasketForBatch(batch.id);
+
+  // Starts on the batch that would be sold first anyway (soonest expiry) that
+  // still has units left. The cashier can pick another one in the list.
+  const [selectedBatchId, setSelectedBatchId] = useState<number | null>(
+    () => batches.find((b) => freeIn(b) > 0)?.id ?? null
+  );
   const [quantity, setQuantity] = useState(1);
 
-  // What can still go into the basket without going over the shelf stock.
-  const canAdd = Math.max(0, product.stock_quantity - inBasket);
-  const nearExpiryUnits = product.near_expiry_count;
-  const salePrice = markedDownPrice(product.price);
+  const hasBatches = batches.length > 0;
+  const selectedBatch = batches.find((b) => b.id === selectedBatchId) ?? null;
+  const productRoomLeft = Math.max(0, product.stock_quantity - inBasket);
 
-  // Batches that can still be sold (not expired: expiry after today, or no
-  // expiry date), in the order they'll be sold: soonest expiry first,
-  // no-expiry-date last. Same rules as the database.
-  const sellableBatches = batches
-    .filter((b) => b.status === 'active' && b.quantity_remaining > 0)
-    .filter((b) => !b.expiry_date || daysUntilExpiry(b.expiry_date) > 0)
-    .sort((a, b) => {
-      if (!a.expiry_date) return 1;
-      if (!b.expiry_date) return -1;
-      return a.expiry_date.localeCompare(b.expiry_date);
-    });
+  // How many can still go into the basket: limited by the product's stock and,
+  // when a batch is picked, by what's left in that batch.
+  const canAdd = hasBatches
+    ? selectedBatch
+      ? Math.min(productRoomLeft, freeIn(selectedBatch))
+      : 0
+    : productRoomLeft;
+
+  // The price shown: with a batch picked, it's 15% off only if that batch is
+  // near expiry. Without batches (self-serve), the markdown applies to however
+  // many units are near expiry, and the note explains it.
+  const salePrice = markedDownPrice(product.price);
+  const selectedIsMarkedDown = selectedBatch ? isNearExpiry(selectedBatch.expiry_date) : false;
+  const showSale = hasBatches ? selectedIsMarkedDown : product.near_expiry_count > 0;
 
   // Esc closes the window.
   useEffect(() => {
@@ -44,6 +66,13 @@ export default function ProductDetails({ product, batches, inBasket, onAdd, onCl
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // Picking another batch: keep the quantity, but not more than that batch has.
+  const selectBatch = (batch: ProductBatch) => {
+    if (freeIn(batch) <= 0) return;
+    setSelectedBatchId(batch.id);
+    setQuantity((q) => Math.max(1, Math.min(q, freeIn(batch), productRoomLeft)));
+  };
 
   const changeQuantity = (next: number) => {
     setQuantity(Math.max(1, Math.min(next, canAdd)));
@@ -72,14 +101,15 @@ export default function ProductDetails({ product, batches, inBasket, onAdd, onCl
         </div>
 
         <div className="product-details-price">
-          {nearExpiryUnits > 0 ? (
+          {showSale ? (
             <>
               <span className="price-old">₱{product.price.toFixed(2)}</span>{' '}
               <strong className="price-sale">₱{salePrice.toFixed(2)}</strong>{' '}
               <span className="badge badge-sale">{NEAR_EXPIRY_PERCENT_OFF}% off</span>
               <p className="product-details-note">
-                {NEAR_EXPIRY_PERCENT_OFF}% off the {nearExpiryUnits} unit{nearExpiryUnits === 1 ? '' : 's'} expiring
-                within {NEAR_EXPIRY_DAYS} days. After those, ₱{product.price.toFixed(2)} each.
+                {hasBatches
+                  ? `Batch ${selectedBatch?.batch_code} expires within ${NEAR_EXPIRY_DAYS} days, so it's ${NEAR_EXPIRY_PERCENT_OFF}% off.`
+                  : `${NEAR_EXPIRY_PERCENT_OFF}% off the ${product.near_expiry_count} unit${product.near_expiry_count === 1 ? '' : 's'} expiring within ${NEAR_EXPIRY_DAYS} days. After those, ₱${product.price.toFixed(2)} each.`}
               </p>
             </>
           ) : (
@@ -108,40 +138,72 @@ export default function ProductDetails({ product, batches, inBasket, onAdd, onCl
           )}
         </dl>
 
-        {sellableBatches.length > 0 && (
-          <table className="data-table product-details-batches">
-            <thead>
-              <tr>
-                <th>Batch</th>
-                <th>Left</th>
-                <th>Expiry</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {sellableBatches.map((batch, index) => (
-                <tr key={batch.id}>
-                  <td>{batch.batch_code}</td>
-                  <td>{batch.quantity_remaining}</td>
-                  <td>
-                    {/* The date, plus "Expires in 3 days" when it's within a
-                        week (further out, the label would just repeat the date). */}
-                    {batch.expiry_date
-                      ? daysUntilExpiry(batch.expiry_date) <= 7
-                        ? `${batch.expiry_date} · ${formatExpiry(batch.expiry_date)}`
-                        : batch.expiry_date
-                      : formatExpiry(null)}
-                  </td>
-                  <td>
-                    {index === 0 && <span className="badge badge-ok">Sold next</span>}{' '}
-                    {isNearExpiry(batch.expiry_date) && (
-                      <span className="badge badge-sale">{NEAR_EXPIRY_PERCENT_OFF}% off</span>
-                    )}
-                  </td>
+        {hasBatches && (
+          <>
+            <p className="product-details-note">Choose the batch to sell from:</p>
+            <table className="data-table product-details-batches">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Batch</th>
+                  <th>Available</th>
+                  <th>Expiry</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {batches.map((batch, index) => {
+                  const free = freeIn(batch);
+                  const isSelected = batch.id === selectedBatchId;
+                  return (
+                    <tr
+                      key={batch.id}
+                      className={[
+                        'batch-row',
+                        isSelected ? 'is-selected' : '',
+                        free <= 0 ? 'is-empty' : '',
+                      ].filter(Boolean).join(' ')}
+                      onClick={() => selectBatch(batch)}
+                    >
+                      <td>
+                        <input
+                          type="radio"
+                          name="batch"
+                          checked={isSelected}
+                          disabled={free <= 0}
+                          onChange={() => selectBatch(batch)}
+                          aria-label={`Sell from batch ${batch.batch_code}`}
+                        />
+                      </td>
+                      <td>{batch.batch_code}</td>
+                      <td>
+                        {free}
+                        {/* Some of this batch is already in the basket. */}
+                        {free < batch.quantity_remaining && (
+                          <small> ({batch.quantity_remaining - free} in basket)</small>
+                        )}
+                      </td>
+                      <td>
+                        {/* The date, plus "Expires in 3 days" when it's within a
+                            week (further out, the label would just repeat the date). */}
+                        {batch.expiry_date
+                          ? daysUntilExpiry(batch.expiry_date) <= 7
+                            ? `${batch.expiry_date} · ${formatExpiry(batch.expiry_date)}`
+                            : batch.expiry_date
+                          : formatExpiry(null)}
+                      </td>
+                      <td>
+                        {index === 0 && <span className="badge badge-ok">Expires first</span>}{' '}
+                        {isNearExpiry(batch.expiry_date) && (
+                          <span className="badge badge-sale">{NEAR_EXPIRY_PERCENT_OFF}% off</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </>
         )}
 
         <div className="product-details-actions">
@@ -167,13 +229,19 @@ export default function ProductDetails({ product, batches, inBasket, onAdd, onCl
                 </button>
               </div>
               {/* Focused when the window opens, so Enter adds it straight away. */}
-              <button className="btn-primary" onClick={() => onAdd(quantity)} autoFocus>
-                Add to basket
+              <button
+                className="btn-primary"
+                onClick={() => onAdd(Math.min(quantity, canAdd), selectedBatch ?? undefined)}
+                autoFocus
+              >
+                {selectedBatch ? `Add from ${selectedBatch.batch_code}` : 'Add to basket'}
               </button>
             </>
           ) : (
             <span className="product-details-note">
-              {product.stock_quantity <= 0 ? 'Out of stock.' : 'All available stock is already in the basket.'}
+              {product.stock_quantity <= 0
+                ? 'Out of stock.'
+                : 'All available stock is already in the basket.'}
             </span>
           )}
         </div>

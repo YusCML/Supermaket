@@ -2,6 +2,7 @@ import { useRef, useState, type KeyboardEvent } from 'react';
 import type { ProductInventorySummary, ProductBatch, Customer, CartItem, CheckoutPayload } from '../types/app';
 import { discountForPoints, maxRedeemablePoints, roundToCentavos } from '../lib/loyalty';
 import { markedDownPrice, NEAR_EXPIRY_PERCENT_OFF, priceLine } from '../lib/pricing';
+import { formatExpiry, isNearExpiry, sellableBatches } from '../lib/expiry';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotify } from '../contexts/NotifyContext';
 import ProductDetails from './ProductDetails';
@@ -86,24 +87,83 @@ export default function POS({ products = [], customers = [], batches = [], onChe
     );
   });
 
-  // Puts `quantity` of a product in the basket (1 for a scan or the + button,
-  // whatever was chosen in the details window). The stock checks happen out
-  // here rather than inside setCart, because React may run that callback twice
-  // in development (StrictMode), which would show the message twice.
-  const addToCart = (product: ProductInventorySummary, quantity = 1) => {
-    const alreadyInCart = cart.find((item) => item.id === product.id)?.quantity ?? 0;
+  // --- Basket lines and batches -------------------------------------------------
+  // A basket line is one product from one batch, so the same milk can be on
+  // two lines (e.g. 2 from batch B-1 and 1 from B-3). At self-serve there are
+  // no batches (customers can't see them), so a line is just the product and
+  // the database takes the soonest-expiring stock.
+  const lineKey = (item: Pick<CartItem, 'id' | 'batch_id'>) => `${item.id}:${item.batch_id ?? 'any'}`;
 
+  // A product's batches that can still be sold, in the order they're sold by
+  // default: soonest expiry first, no expiry date last. Same rules as the database.
+  const sellableBatchesOf = (productId: number) =>
+    sellableBatches(batches.filter((b) => b.product_id === productId));
+
+  // How many units are already in the basket: of a whole product, or from one batch.
+  const inCartForProduct = (productId: number) =>
+    cart.filter((item) => item.id === productId).reduce((sum, item) => sum + item.quantity, 0);
+  const inCartForBatch = (batchId: number) =>
+    cart.filter((item) => item.batch_id === batchId).reduce((sum, item) => sum + item.quantity, 0);
+
+  // Puts `quantity` of a product in the basket.
+  //   * With a batch (picked in the details window, or the + on a batch line):
+  //     only from that batch.
+  //   * Without one (a scan): at the till we fill from the soonest-expiring
+  //     batch, and carry on into the next batch if that one runs out. At
+  //     self-serve it's one line for the product and the database picks.
+  // The stock checks happen out here rather than inside setCart, because React
+  // may run that callback twice in development (StrictMode), which would show
+  // the message twice.
+  const addToCart = (product: ProductInventorySummary, quantity = 1, batch?: ProductBatch) => {
     if (product.stock_quantity <= 0) return notify('Item is out of stock!', 'error');
-    if (alreadyInCart + quantity > product.stock_quantity) return notify('Cannot exceed available stock!', 'error');
+    if (inCartForProduct(product.id) + quantity > product.stock_quantity) {
+      return notify('Cannot exceed available stock!', 'error');
+    }
+
+    // Which batch each unit comes from: [{ batch (or null), how many }].
+    const portions: { batch: ProductBatch | null; quantity: number }[] = [];
+    const productBatches = sellableBatchesOf(product.id);
+
+    if (batch) {
+      const free = batch.quantity_remaining - inCartForBatch(batch.id);
+      if (quantity > free) return notify(`Batch ${batch.batch_code} only has ${free} left.`, 'error');
+      portions.push({ batch, quantity });
+    } else if (productBatches.length > 0) {
+      let left = quantity;
+      for (const b of productBatches) {
+        const take = Math.min(left, b.quantity_remaining - inCartForBatch(b.id));
+        if (take > 0) {
+          portions.push({ batch: b, quantity: take });
+          left -= take;
+        }
+        if (left === 0) break;
+      }
+      if (left > 0) return notify('Not enough unexpired stock left for this product.', 'error');
+    } else {
+      portions.push({ batch: null, quantity });
+    }
 
     setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + quantity } : item
-        );
+      let next = prev;
+      for (const portion of portions) {
+        const key = lineKey({ id: product.id, batch_id: portion.batch?.id ?? null });
+        const existing = next.find((item) => lineKey(item) === key);
+        next = existing
+          ? next.map((item) =>
+              lineKey(item) === key ? { ...item, quantity: item.quantity + portion.quantity } : item
+            )
+          : [
+              ...next,
+              {
+                ...product,
+                quantity: portion.quantity,
+                batch_id: portion.batch?.id ?? null,
+                batch_code: portion.batch?.batch_code ?? null,
+                batch_expiry: portion.batch?.expiry_date ?? null,
+              },
+            ];
       }
-      return [...prev, { ...product, quantity }];
+      return next;
     });
   };
 
@@ -116,8 +176,8 @@ export default function POS({ products = [], customers = [], batches = [], onChe
   // an Add to basket button. Scanning a barcode still adds straight away.
   const detailsProduct = products.find((p) => p.id === detailsProductId) ?? null;
 
-  const removeFromCart = (id: number) => {
-    setCart((prev) => prev.filter((item) => item.id !== id));
+  const removeFromCart = (key: string) => {
+    setCart((prev) => prev.filter((item) => lineKey(item) !== key));
   };
 
   // How many of this product are on the shelf right now. Read from the product
@@ -125,19 +185,31 @@ export default function POS({ products = [], customers = [], batches = [], onChe
   const stockOf = (id: number) =>
     products.find((p) => p.id === id)?.stock_quantity ?? 0;
 
-  // The + button in the basket. Same as clicking the product again, so the
-  // stock check lives in one place (addToCart).
-  const increaseQuantity = (id: number) => {
-    const product = products.find((p) => p.id === id);
-    if (product) addToCart(product);
+  // The batch a basket line comes from (null for self-serve lines).
+  const batchOfLine = (item: CartItem) =>
+    item.batch_id === null ? null : batches.find((b) => b.id === item.batch_id) ?? null;
+
+  // Whether the + on a line can add one more: there must be stock left for the
+  // product and, for a batch line, in that batch.
+  const canAddOneMore = (item: CartItem) => {
+    if (inCartForProduct(item.id) >= stockOf(item.id)) return false;
+    const batch = batchOfLine(item);
+    return batch ? inCartForBatch(batch.id) < batch.quantity_remaining : true;
+  };
+
+  // The + button in the basket: one more from the same batch as that line.
+  // Goes through addToCart so the stock checks live in one place.
+  const increaseQuantity = (item: CartItem) => {
+    const product = products.find((p) => p.id === item.id);
+    if (product) addToCart(product, 1, batchOfLine(item) ?? undefined);
   };
 
   // The − button. Stops at 1; the × button is for taking an item out
   // completely, so a quick double-tap on − can't remove it by accident.
-  const decreaseQuantity = (id: number) => {
+  const decreaseQuantity = (key: string) => {
     setCart((prev) =>
       prev.map((item) =>
-        item.id === id && item.quantity > 1 ? { ...item, quantity: item.quantity - 1 } : item
+        lineKey(item) === key && item.quantity > 1 ? { ...item, quantity: item.quantity - 1 } : item
       )
     );
   };
@@ -244,21 +316,26 @@ export default function POS({ products = [], customers = [], batches = [], onChe
   // This is only a preview for the cashier. The database recalculates all of
   // it from the real prices when the sale is saved.
   //
-  // Each line is priced with the near-expiry markdown: the units closest to
-  // expiring (sold first) are 15% off, the rest are full price.
-  const linePrices = new Map(
-    cart.map((item) => [
-      item.id,
-      priceLine(item.price || 0, item.quantity, nearExpiryUnitsOf(item.id)),
-    ])
-  );
+  // Each line is priced with the near-expiry markdown:
+  //   * a batch line is all 15% off if that batch is near expiry, otherwise
+  //     all full price;
+  //   * a self-serve line (no batch) has its soonest-expiring units 15% off
+  //     (they're sold first), the rest full price.
+  const priceOfLine = (item: CartItem) =>
+    item.batch_id !== null
+      ? priceLine(item.price || 0, item.quantity, isNearExpiry(item.batch_expiry) ? item.quantity : 0)
+      : priceLine(item.price || 0, item.quantity, nearExpiryUnitsOf(item.id));
+  const linePrices = new Map(cart.map((item) => [lineKey(item), priceOfLine(item)]));
+  const lineTotalOf = (item: CartItem) => linePrices.get(lineKey(item))?.total ?? 0;
+  const markedDownQtyOf = (item: CartItem) => linePrices.get(lineKey(item))?.markedDownQty ?? 0;
+
   // Before any discounts, what the near-expiry markdown takes off, and what's
   // left (the bill that points can then be used on).
   const fullPriceTotal = roundToCentavos(
     cart.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0)
   );
   const nearExpirySavings = roundToCentavos(
-    cart.reduce((sum, item) => sum + (linePrices.get(item.id)?.savings ?? 0), 0)
+    cart.reduce((sum, item) => sum + (linePrices.get(lineKey(item))?.savings ?? 0), 0)
   );
   const total = roundToCentavos(fullPriceTotal - nearExpirySavings);
 
@@ -485,13 +562,19 @@ export default function POS({ products = [], customers = [], batches = [], onChe
             <p className="empty-cart">Basket is empty</p>
           ) : (
             cart.map((item) => (
-              <div key={item.id} className="cart-item">
+              <div key={lineKey(item)} className="cart-item">
                 <div>
                   <strong>{item.name}</strong>
+                  {/* Which batch this line comes from (staff only). */}
+                  {item.batch_code && (
+                    <div className="cart-batch">
+                      Batch {item.batch_code} · {formatExpiry(item.batch_expiry)}
+                    </div>
+                  )}
                   <div className="qty-control">
                     <button
                       className="btn-sm"
-                      onClick={() => decreaseQuantity(item.id)}
+                      onClick={() => decreaseQuantity(lineKey(item))}
                       disabled={item.quantity <= 1}
                       aria-label={`One less ${item.name}`}
                     >
@@ -500,9 +583,9 @@ export default function POS({ products = [], customers = [], batches = [], onChe
                     <span className="qty-value">{item.quantity}</span>
                     <button
                       className="btn-sm"
-                      onClick={() => increaseQuantity(item.id)}
-                      // Greyed out once the basket holds everything on the shelf.
-                      disabled={item.quantity >= stockOf(item.id)}
+                      onClick={() => increaseQuantity(item)}
+                      // Greyed out once there's no more stock (in this batch).
+                      disabled={!canAddOneMore(item)}
                       aria-label={`One more ${item.name}`}
                     >
                       +
@@ -510,14 +593,14 @@ export default function POS({ products = [], customers = [], batches = [], onChe
                   </div>
                 </div>
                 <div>
-                  <span>₱{(linePrices.get(item.id)?.total ?? 0).toFixed(2)} </span>
-                  <button className="btn-sm btn-danger" onClick={() => removeFromCart(item.id)}>
+                  <span>₱{lineTotalOf(item).toFixed(2)} </span>
+                  <button className="btn-sm btn-danger" onClick={() => removeFromCart(lineKey(item))}>
                     ×
                   </button>
                   {/* Say which units got the markdown, e.g. "2 × ₱80.75 (15% off)". */}
-                  {(linePrices.get(item.id)?.markedDownQty ?? 0) > 0 && (
+                  {markedDownQtyOf(item) > 0 && (
                     <div className="cart-markdown">
-                      {linePrices.get(item.id)!.markedDownQty} × ₱{markedDownPrice(item.price || 0).toFixed(2)}{' '}
+                      {markedDownQtyOf(item)} × ₱{markedDownPrice(item.price || 0).toFixed(2)}{' '}
                       ({NEAR_EXPIRY_PERCENT_OFF}% off, near expiry)
                     </div>
                   )}
@@ -557,10 +640,11 @@ export default function POS({ products = [], customers = [], batches = [], onChe
       {detailsProduct && (
         <ProductDetails
           product={detailsProduct}
-          batches={batches.filter((b) => b.product_id === detailsProduct.id)}
-          inBasket={cart.find((item) => item.id === detailsProduct.id)?.quantity ?? 0}
-          onAdd={(quantity) => {
-            addToCart(detailsProduct, quantity);
+          batches={sellableBatchesOf(detailsProduct.id)}
+          inBasket={inCartForProduct(detailsProduct.id)}
+          inBasketForBatch={inCartForBatch}
+          onAdd={(quantity, batch) => {
+            addToCart(detailsProduct, quantity, batch);
             setDetailsProductId(null);
           }}
           onClose={() => setDetailsProductId(null)}
