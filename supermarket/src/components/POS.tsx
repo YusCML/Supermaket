@@ -11,7 +11,7 @@ interface POSProps {
   // 'self-serve': a customer buying for themselves. The sale always goes on
   //   their own loyalty account, so there's no member lookup at all.
   // 'staff': a cashier or admin at the till. They look the customer up by
-  //   loyalty ID / phone / email, or leave the box empty for a walk-in.
+  //   name / loyalty ID / phone / email. A member is required to check out.
   mode?: 'self-serve' | 'staff';
 }
 
@@ -50,7 +50,7 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
   // Who the sale goes on when the screen opens (and again after each sale).
   // At self-serve that's always you: everyone who logs in is a loyalty member.
   // At the till it starts empty: the cashier is serving someone else, so they
-  // look that customer up. Left empty, it's a walk-in (no member, no points).
+  // look that customer up. Checkout stays blocked until a member is picked.
   const me = customers.find((c) => c.id === user?.id) ?? null;
   const startingMember = isSelfServe ? me : null;
 
@@ -161,7 +161,8 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
     : [];
   const suggestionsOpen = showSuggestions && isSearchingMember;
 
-  // Clearing the member box turns the sale into a walk-in: no member, no points.
+  // Clearing the member box un-picks the member (and any points typed in), so
+  // checkout is blocked again until someone is looked up.
   const handleMemberInput = (value: string) => {
     setPhoneSearch(value);
     setShowSuggestions(true);
@@ -270,13 +271,17 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
       );
     }
 
+    // Every sale has to go on a loyalty account, so no member = no checkout.
+    // The cashier looks the customer up first (or signs them up). The database
+    // refuses a sale without a member too; this just says so straight away.
+    if (!selectedCustomer) {
+      return notify('Look up a member (name or loyalty ID) before checking out.', 'error');
+    }
+
     // "Loyalty Points" as the payment method means the whole bill is paid
-    // with points, so there has to be a member and enough points to reach ₱0.
+    // with points, so there have to be enough points to bring it to ₱0.
     // The database checks this too. Catching it here just saves a round trip.
     if (paymentMethod === 'Loyalty Points') {
-      if (!selectedCustomer) {
-        return notify('Look up a member first to pay with loyalty points.', 'error');
-      }
       if (finalTotal > 0) {
         return notify(
           `Not enough points redeemed to cover the bill. ₱${finalTotal.toFixed(2)} is still due.`,
