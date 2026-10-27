@@ -208,8 +208,8 @@ export const api = {
     const { cart, customerId, pointsToRedeem, paymentMethod } = payload;
 
     const { data, error } = await supabase.rpc('process_pos_checkout', {
-      // batch_id: the batch picked at the till; null lets the database take
-      // the soonest-expiring stock (self-serve).
+      // batch_id: the batch that was picked; null lets the database take
+      // the soonest-expiring stock.
       p_cart_items: cart.map((item) => ({
         product_id: item.id,
         quantity: item.quantity,

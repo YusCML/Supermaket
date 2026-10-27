@@ -111,9 +111,10 @@ export interface LoyaltyLog {
 
 export interface CartItem extends Product {
   quantity: number;
-  // Which stock batch these units come from. At the till it's the batch the
-  // cashier picked (or the soonest-expiring one, for scans and +). At
-  // self-serve it's null and the database takes soonest-expiring first.
+  // Which stock batch these units come from: the batch that was picked (or the
+  // soonest-expiring one, for scans and +), at the till and at self-serve.
+  // null only if the batches weren't known; the database then takes the
+  // soonest-expiring stock.
   batch_id: number | null;
   batch_code: string | null;
   batch_expiry: string | null;

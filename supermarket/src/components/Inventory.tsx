@@ -4,6 +4,7 @@ import { useNotify } from '../contexts/NotifyContext';
 import { formatExpiry, sellableBatches } from '../lib/expiry';
 import { NEAR_EXPIRY_PERCENT_OFF } from '../lib/pricing';
 import BatchBreakdown from './BatchBreakdown';
+import BarcodeImage from './BarcodeImage';
 
 interface InventoryProps {
   products: Product[];
@@ -190,7 +191,13 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
                   isLow || isExpiring ? 'low-stock-row' : '',
                 ].filter(Boolean).join(' ')}
               >
-                <td>{p.sku} / {p.barcode}</td>
+                <td>
+                  {p.sku}
+                  {/* The barcode as real bars (number underneath), ready to scan or print. */}
+                  <div className="inventory-barcode">
+                    <BarcodeImage value={p.barcode} height={30} barWidth={1} fontSize={11} />
+                  </div>
+                </td>
                 <td><strong>{p.name}</strong></td>
                 <td>{p.category}</td>
                 <td>₱{p.price.toFixed(2)}</td>

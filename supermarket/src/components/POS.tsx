@@ -11,8 +11,8 @@ import BatchBreakdown from './BatchBreakdown';
 interface POSProps {
   products: ProductInventorySummary[];
   customers: Customer[];
-  // Stock batches, shown in the product details window. Staff only; customers
-  // don't get batches, so at self-serve the window shows the summary instead.
+  // Stock batches: picked from in the product details window, and shown as
+  // per-batch counts on the product cards. Everyone gets them (till and self-serve).
   batches?: ProductBatch[];
   onCheckout: (payload: CheckoutPayload) => Promise<void>;
   // 'self-serve': a customer buying for themselves. The sale always goes on
@@ -90,9 +90,9 @@ export default function POS({ products = [], customers = [], batches = [], onChe
 
   // --- Basket lines and batches -------------------------------------------------
   // A basket line is one product from one batch, so the same milk can be on
-  // two lines (e.g. 2 from batch B-1 and 1 from B-3). At self-serve there are
-  // no batches (customers can't see them), so a line is just the product and
-  // the database takes the soonest-expiring stock.
+  // two lines (e.g. 2 from batch B-1 and 1 from B-3). Only if a product's
+  // batches aren't known (none loaded) is a line just the product, and the
+  // database takes the soonest-expiring stock.
   const lineKey = (item: Pick<CartItem, 'id' | 'batch_id'>) => `${item.id}:${item.batch_id ?? 'any'}`;
 
   // A product's batches that can still be sold, in the order they're sold by
@@ -109,9 +109,9 @@ export default function POS({ products = [], customers = [], batches = [], onChe
   // Puts `quantity` of a product in the basket.
   //   * With a batch (picked in the details window, or the + on a batch line):
   //     only from that batch.
-  //   * Without one (a scan): at the till we fill from the soonest-expiring
-  //     batch, and carry on into the next batch if that one runs out. At
-  //     self-serve it's one line for the product and the database picks.
+  //   * Without one (a scan): we fill from the soonest-expiring batch, and
+  //     carry on into the next batch if that one runs out. If the batches
+  //     aren't known, it's one line for the product and the database picks.
   // The stock checks happen out here rather than inside setCart, because React
   // may run that callback twice in development (StrictMode), which would show
   // the message twice.
@@ -186,7 +186,7 @@ export default function POS({ products = [], customers = [], batches = [], onChe
   const stockOf = (id: number) =>
     products.find((p) => p.id === id)?.stock_quantity ?? 0;
 
-  // The batch a basket line comes from (null for self-serve lines).
+  // The batch a basket line comes from (null if it has no batch).
   const batchOfLine = (item: CartItem) =>
     item.batch_id === null ? null : batches.find((b) => b.id === item.batch_id) ?? null;
 
@@ -320,7 +320,7 @@ export default function POS({ products = [], customers = [], batches = [], onChe
   // Each line is priced with the near-expiry markdown:
   //   * a batch line is all 15% off if that batch is near expiry, otherwise
   //     all full price;
-  //   * a self-serve line (no batch) has its soonest-expiring units 15% off
+  //   * a line without a batch has its soonest-expiring units 15% off
   //     (they're sold first), the rest full price.
   const priceOfLine = (item: CartItem) =>
     item.batch_id !== null
@@ -448,6 +448,8 @@ export default function POS({ products = [], customers = [], batches = [], onChe
             filteredProducts.map((p) => (
               <div key={p.id} className="product-card" onClick={() => setDetailsProductId(p.id)}>
                 <h4>{p.name}</h4>
+                {/* The barcode number, so it can be checked against the label. */}
+                <div className="product-barcode">{p.barcode}</div>
                 {p.near_expiry_count > 0 ? (
                   // Near-expiry stock: show the old price crossed out and the
                   // 15% off price, so shoppers notice the deal.
@@ -459,8 +461,7 @@ export default function POS({ products = [], customers = [], batches = [], onChe
                   <p>₱{(p.price || 0).toFixed(2)}</p>
                 )}
                 <small>Stock: {p.stock_quantity}</small>
-                {/* Staff see how the stock splits across batches (customers
-                    don't get batches, so nothing shows at self-serve). */}
+                {/* How the stock splits across batches, e.g. B-3: 10, B-1: 3. */}
                 <BatchBreakdown batches={sellableBatchesOf(p.id)} />
                 {p.near_expiry_count > 0 && (
                   <div>
@@ -569,7 +570,7 @@ export default function POS({ products = [], customers = [], batches = [], onChe
               <div key={lineKey(item)} className="cart-item">
                 <div>
                   <strong>{item.name}</strong>
-                  {/* Which batch this line comes from (staff only). */}
+                  {/* Which batch this line comes from. */}
                   {item.batch_code && (
                     <div className="cart-batch">
                       Batch {item.batch_code} · {formatExpiry(item.batch_expiry)}

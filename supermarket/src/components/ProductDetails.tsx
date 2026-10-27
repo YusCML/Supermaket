@@ -2,18 +2,19 @@ import { useEffect, useState } from 'react';
 import type { ProductBatch, ProductInventorySummary } from '../types/app';
 import { daysUntilExpiry, formatExpiry, isNearExpiry } from '../lib/expiry';
 import { markedDownPrice, NEAR_EXPIRY_DAYS, NEAR_EXPIRY_PERCENT_OFF } from '../lib/pricing';
+import BarcodeImage from './BarcodeImage';
 
 interface ProductDetailsProps {
   product: ProductInventorySummary;
   // This product's batches that can still be sold, soonest expiry first.
-  // Staff only: customers can't see batches, so at self-serve this is empty
-  // and the window shows the summary instead (the database picks the batch).
+  // Shown at the till and at self-serve. If it's empty (batches couldn't be
+  // loaded), the window shows the summary and the database picks the batch.
   batches: ProductBatch[];
   // How many of this product are already in the basket, in total and per batch,
   // so we never offer more than the shelf (or the batch) has.
   inBasket: number;
   inBasketForBatch: (batchId: number) => number;
-  // `batch` is the one picked in the list; undefined at self-serve.
+  // `batch` is the one picked in the list; undefined if there's no list.
   onAdd: (quantity: number, batch?: ProductBatch) => void;
   onClose: () => void;
 }
@@ -52,7 +53,7 @@ export default function ProductDetails({
     : productRoomLeft;
 
   // The price shown: with a batch picked, it's 15% off only if that batch is
-  // near expiry. Without batches (self-serve), the markdown applies to however
+  // near expiry. Without a batch list, the markdown applies to however
   // many units are near expiry, and the note explains it.
   const salePrice = markedDownPrice(product.price);
   const selectedIsMarkedDown = selectedBatch ? isNearExpiry(selectedBatch.expiry_date) : false;
@@ -98,6 +99,11 @@ export default function ProductDetails({
             </small>
           </div>
           <button className="notice-close" onClick={onClose} aria-label="Close">×</button>
+        </div>
+
+        {/* The product's barcode, scannable straight off the screen. */}
+        <div className="product-details-barcode">
+          <BarcodeImage value={product.barcode} />
         </div>
 
         <div className="product-details-price">

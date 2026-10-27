@@ -1109,3 +1109,32 @@
   font-weight: 400;
   color: #64748b;
 }
+
+/* Barcodes (drawn as bars by BarcodeImage) */
+.barcode-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.barcode-text,
+.product-barcode {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.75rem;
+  color: #64748b;
+  letter-spacing: 0.03em;
+}
+
+.product-barcode {
+  margin: -0.4rem 0 0.4rem;
+}
+
+.inventory-barcode {
+  margin-top: 0.3rem;
+}
+
+.product-details-barcode {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 0.75rem;
+}

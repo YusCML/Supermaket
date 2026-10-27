@@ -15,14 +15,13 @@ import type {
 // customer, cashier and admin pages don't each repeat the same fetching code.
 //
 // `role` is the interface being used, and decides what gets fetched:
-//   customer -> products + stock levels/expiry, and their own loyalty profile
-//   cashier  -> + stock batches, and every member (for the lookup)
+//   customer -> products, stock levels, batches, and their own loyalty profile
+//   cashier  -> + every member (for the lookup)
 //   admin    -> + the loyalty points log
 // Fetching more wouldn't leak anything (the database only returns what the
 // person may see), it would just be wasted requests.
 export function useStoreData(role: AppRole) {
   const { user } = useAuth();
-  const isStaff = role === 'cashier' || role === 'admin';
   const isAdmin = role === 'admin';
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -44,7 +43,8 @@ export function useStoreData(role: AppRole) {
         // Everyone gets the stock summary: customers need it at self-serve to
         // see near-expiry markdowns and expiry dates.
         api.getInventoryOverview(),
-        isStaff ? api.getProductBatches() : Promise.resolve([] as ProductBatch[]),
+        // Everyone gets the batches too, so customers can pick one at self-serve.
+        api.getProductBatches(),
       ]);
       setProducts(prodData);
       setInventory(inventoryData);
