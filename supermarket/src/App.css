@@ -736,3 +736,405 @@
 .role-actions {
   white-space: nowrap;
 }
+
+/* POS: member suggestions under the member box */
+.member-search {
+  position: relative;
+  flex: 1;
+  display: flex;
+}
+
+.member-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.member-suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+}
+
+.member-suggestion.is-active {
+  background: #eff6ff;
+}
+
+.member-suggestion small,
+.member-suggestion-empty {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.member-suggestion-empty {
+  padding: 0.5rem 0.75rem;
+}
+
+/* POS: − / + quantity buttons on each basket line */
+.qty-control {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.3rem;
+}
+
+.qty-control .btn-sm {
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-right: 0;
+  padding: 0;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.qty-value {
+  min-width: 1.5rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* App notifications (replace the browser's "localhost says..." alerts) */
+.notice-stack {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(360px, calc(100vw - 2rem));
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.75rem 0.75rem 0.75rem 0.9rem;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #2563eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15);
+  font-size: 0.9rem;
+  animation: notice-in 0.18s ease-out;
+}
+
+.notice-success { border-left-color: #16a34a; }
+.notice-error   { border-left-color: #dc2626; }
+.notice-info    { border-left-color: #2563eb; }
+
+.notice-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.notice-success .notice-icon { background: #16a34a; }
+.notice-error .notice-icon   { background: #dc2626; }
+.notice-info .notice-icon    { background: #2563eb; }
+
+.notice-message {
+  flex: 1;
+  line-height: 1.35;
+}
+
+.notice-close {
+  flex: none;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.notice-close:hover {
+  color: #475569;
+}
+
+@keyframes notice-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* App confirmation dialog (replaces the browser's confirm box) */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.45);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.confirm-dialog {
+  width: 100%;
+  max-width: 400px;
+  padding: 1.5rem;
+  background: #fff;
+  color: #1e293b;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.confirm-dialog h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.confirm-dialog p {
+  margin: 0 0 1.25rem;
+  color: #475569;
+  line-height: 1.4;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.confirm-actions button {
+  padding: 0.55rem 1rem;
+  font-size: 0.95rem;
+}
+
+/* Near-expiry markdown: crossed-out old price, sale price, "15% off" badge */
+.price-old {
+  color: #94a3b8;
+  text-decoration: line-through;
+  font-size: 0.9em;
+}
+
+.price-sale {
+  color: #b91c1c;
+}
+
+.badge-sale {
+  background: #fee2e2;
+  color: #b91c1c;
+  white-space: nowrap;
+}
+
+.cart-markdown {
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  color: #b91c1c;
+  text-align: right;
+}
+
+.summary-markdown {
+  color: #b91c1c;
+}
+
+/* Product details window (opens when a product is picked at checkout) */
+.product-details {
+  width: 100%;
+  max-width: 560px;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  padding: 1.5rem;
+  background: #fff;
+  color: #1e293b;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.product-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.product-details-header h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.25rem;
+}
+
+.product-details-header small {
+  color: #64748b;
+}
+
+.product-details-price {
+  margin: 1rem 0;
+  font-size: 1.3rem;
+}
+
+.product-details-note {
+  margin: 0.4rem 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.product-details-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.product-details-facts div {
+  padding: 0.6rem 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.product-details-facts dt {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.product-details-facts dd {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
+
+.product-details-batches {
+  margin-top: 0;
+  font-size: 0.85rem;
+}
+
+.product-details-batches th,
+.product-details-batches td {
+  padding: 0.5rem;
+}
+
+.product-details-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.product-details-actions .qty-control {
+  margin-top: 0;
+}
+
+.product-details-actions .btn-primary {
+  padding: 0.6rem 1.1rem;
+}
+
+/* Let the "15% off · N expiring soon" badge wrap inside narrow product cards. */
+.product-card .badge-sale {
+  display: inline-block;
+  margin-top: 0.3rem;
+  white-space: normal;
+  line-height: 1.3;
+}
+
+/* Which batch a basket line comes from */
+.cart-batch {
+  margin-top: 0.1rem;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+/* Choosing a batch in the product details window */
+.batch-row {
+  cursor: pointer;
+}
+
+.batch-row:hover td {
+  background: #f8fafc;
+}
+
+.batch-row.is-selected td {
+  background: #eff6ff;
+}
+
+.batch-row.is-empty {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.batch-row small {
+  color: #64748b;
+}
+
+/* Stock split by batch, e.g. "B-3: 10" "B-1: 3" (Inventory, POS cards) */
+.batch-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.3rem;
+}
+
+.batch-chip {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.batch-chip.is-near-expiry {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.facts-sub {
+  font-weight: 400;
+  color: #64748b;
+}
+
+/* Barcodes (drawn as bars by BarcodeImage) */
+.barcode-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.barcode-text,
+.product-barcode {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.75rem;
+  color: #64748b;
+  letter-spacing: 0.03em;
+}
+
+.product-barcode {
+  margin: -0.4rem 0 0.4rem;
+}
+
+.inventory-barcode {
+  margin-top: 0.3rem;
+}
+
+.product-details-barcode {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 0.75rem;
+}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotify } from '../contexts/NotifyContext';
 import { ALL_ROLES, ROLE_INFO } from '../lib/roles';
 import type { AppRole, Customer } from '../types/app';
 
@@ -24,6 +25,7 @@ function sameRoles(a: AppRole[], b: AppRole[]) {
 // their loyalty account). Tick the boxes, then Save that row.
 export default function UserRoles({ users, staffRoles, onSaveRoles }: UserRolesProps) {
   const { user } = useAuth();
+  const { notify, askToConfirm } = useNotify();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
   // Ticks changed but not saved yet, by user id. Kept apart from the saved
@@ -66,7 +68,12 @@ export default function UserRoles({ users, staffRoles, onSaveRoles }: UserRolesP
 
     const who = member.name || member.email;
     const labels = newRoles.map((r) => ROLE_INFO[r].label).join(', ');
-    if (!confirm(`Set ${who}'s roles to: ${labels}?`)) return;
+    const ok = await askToConfirm({
+      title: 'Change roles?',
+      message: `Set ${who}'s roles to: ${labels}.`,
+      confirmLabel: 'Save roles',
+    });
+    if (!ok) return;
 
     setSavingId(member.id);
     try {
@@ -77,8 +84,9 @@ export default function UserRoles({ users, staffRoles, onSaveRoles }: UserRolesP
         delete next[member.id];
         return next;
       });
+      notify(`${who} is now: ${labels}.`, 'success');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Could not change the roles');
+      notify(err instanceof Error ? err.message : 'Could not change the roles', 'error');
     } finally {
       setSavingId(null);
     }
@@ -108,9 +116,13 @@ export default function UserRoles({ users, staffRoles, onSaveRoles }: UserRolesP
         <input
           type="text"
           className="search-bar"
-          placeholder="Search by name, email or loyalty ID..."
+          // No "email"/"name" in the hint, or Chrome shows its own saved-address
+          // pop-up over the box. It still searches names, emails and loyalty IDs.
+          placeholder="Search members or loyalty ID..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
         />
         <select
           className="role-select"

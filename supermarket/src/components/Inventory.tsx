@@ -1,5 +1,10 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import type { NewProductInput, Product, ProductBatch, ProductInventorySummary, ReceiveStockInput } from '../types/app';
+import { useNotify } from '../contexts/NotifyContext';
+import { formatExpiry, sellableBatches } from '../lib/expiry';
+import { NEAR_EXPIRY_PERCENT_OFF } from '../lib/pricing';
+import BatchBreakdown from './BatchBreakdown';
+import BarcodeImage from './BarcodeImage';
 
 interface InventoryProps {
   products: Product[];
@@ -10,15 +15,18 @@ interface InventoryProps {
   // enforces that too; hiding the forms just keeps cashiers from hitting errors.
   readOnly?: boolean;
   // Admin actions. Not needed (and not passed) when readOnly is on.
-  onAddProduct?: (product: NewProductInput) => Promise<void>;
-  onReceiveStock?: (input: ReceiveStockInput) => Promise<void>;
+  // They return what the database generated: the saved product (with its
+  // barcode) and the new batch code.
+  onAddProduct?: (product: NewProductInput) => Promise<Product>;
+  onReceiveStock?: (input: ReceiveStockInput) => Promise<string>;
   onProcessExpired?: () => Promise<void>;
   onRefresh?: () => void;
 }
 
+// No barcode or batch code boxes: the database always generates both, and
+// keeps them unique.
 const emptyForm = {
   sku: '',
-  barcode: '',
   name: '',
   category: '',
   price: '',
@@ -31,37 +39,13 @@ const emptyReceive = {
   product_id: '',
   quantity: '',
   expiry_date: '',
-  batch_code: '',
 };
-
-function phtToday() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Manila',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
-  return Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day));
-}
-
-function formatExpiry(expiryDate: string | null) {
-  if (!expiryDate) return 'No expiry date';
-  const [year, month, day] = expiryDate.split('-').map(Number);
-  const daysUntilExpiry = Math.floor(
-    (Date.UTC(year, month - 1, day) - phtToday()) / 86_400_000
-  );
-  if (daysUntilExpiry === 0) return 'Expired today';
-  if (daysUntilExpiry === 1) return 'Expires tomorrow';
-  if (daysUntilExpiry > 1 && daysUntilExpiry <= 7) return `Expires in ${daysUntilExpiry} days`;
-  if (daysUntilExpiry < 0) return `Expired ${Math.abs(daysUntilExpiry)} days ago`;
-  return new Date(Date.UTC(year, month - 1, day)).toLocaleDateString();
-}
 
 export default function Inventory({ products, inventory, batches, readOnly = false, onAddProduct, onReceiveStock, onProcessExpired, onRefresh }: InventoryProps) {
   const [form, setForm] = useState(emptyForm);
   const [receiveForm, setReceiveForm] = useState(emptyReceive);
   const [processingExpired, setProcessingExpired] = useState(false);
+  const { notify } = useNotify();
 
   const inventoryMap = useMemo(
     () => Object.fromEntries(inventory.map((item) => [item.id, item])),
@@ -71,9 +55,8 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      await onAddProduct({
+      const saved = await onAddProduct({
         sku: form.sku,
-        barcode: form.barcode,
         name: form.name,
         category: form.category,
         price: parseFloat(form.price),
@@ -82,28 +65,29 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
         reorder_level: parseInt(form.reorder_level, 10),
       });
       setForm(emptyForm);
+      notify(`${form.name} was added to the catalog with barcode ${saved?.barcode ?? '(assigned)'}.`, 'success');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Could not save the product');
+      notify(err instanceof Error ? err.message : 'Could not save the product', 'error');
     }
   };
 
   const handleReceive = async (e: FormEvent) => {
     e.preventDefault();
     if (!receiveForm.product_id || !receiveForm.quantity || !receiveForm.expiry_date) {
-      alert('Select a product, quantity, and expiry date before receiving stock.');
+      notify('Select a product, quantity, and expiry date before receiving stock.', 'error');
       return;
     }
 
     try {
-      await onReceiveStock({
+      const batchCode = await onReceiveStock({
         product_id: Number(receiveForm.product_id),
         quantity: Number(receiveForm.quantity),
         expiry_date: receiveForm.expiry_date,
-        batch_code: receiveForm.batch_code || undefined,
       });
       setReceiveForm(emptyReceive);
+      notify(batchCode ? `Stock received as batch ${batchCode}.` : 'Stock received.', 'success');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Could not receive stock');
+      notify(err instanceof Error ? err.message : 'Could not receive stock', 'error');
     }
   };
 
@@ -112,9 +96,9 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
     setProcessingExpired(true);
     try {
       await onProcessExpired();
-      alert('Expired stock has been processed.');
+      notify('Expired stock has been processed.', 'success');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Could not process expired stock');
+      notify(err instanceof Error ? err.message : 'Could not process expired stock', 'error');
     } finally {
       setProcessingExpired(false);
     }
@@ -132,11 +116,12 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
 
       {!readOnly && (
         <>
-          <form className="form-card" onSubmit={handleSubmit}>
+          {/* autoComplete="off" on both forms: no browser pop-up of values
+              typed into these boxes before. */}
+          <form className="form-card" onSubmit={handleSubmit} autoComplete="off">
             <h3>Add New Product</h3>
             <div className="form-grid">
               <input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} required />
-              <input placeholder="Barcode" value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} required />
               <input placeholder="Product Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
               <input placeholder="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} required />
               <input placeholder="Price (₱)" type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
@@ -147,7 +132,7 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
             <button type="submit" className="btn-primary">Save Product</button>
           </form>
 
-          <form className="form-card" onSubmit={handleReceive}>
+          <form className="form-card" onSubmit={handleReceive} autoComplete="off">
             <h3>Receive Stock by Batch</h3>
             <div className="form-grid">
               <select value={receiveForm.product_id} onChange={(e) => setReceiveForm({ ...receiveForm, product_id: e.target.value })} required>
@@ -158,7 +143,6 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
               </select>
               <input type="number" min="1" placeholder="Batch quantity" value={receiveForm.quantity} onChange={(e) => setReceiveForm({ ...receiveForm, quantity: e.target.value })} required />
               <input type="date" value={receiveForm.expiry_date} onChange={(e) => setReceiveForm({ ...receiveForm, expiry_date: e.target.value })} required />
-              <input placeholder="Optional batch code" value={receiveForm.batch_code} onChange={(e) => setReceiveForm({ ...receiveForm, batch_code: e.target.value })} />
             </div>
             <button type="submit" className="btn-primary">Receive Stock</button>
           </form>
@@ -207,16 +191,29 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
                   isLow || isExpiring ? 'low-stock-row' : '',
                 ].filter(Boolean).join(' ')}
               >
-                <td>{p.sku} / {p.barcode}</td>
+                <td>
+                  {p.sku}
+                  {/* The barcode as real bars (number underneath), ready to scan or print. */}
+                  <div className="inventory-barcode">
+                    <BarcodeImage value={p.barcode} height={30} barWidth={1} fontSize={11} />
+                  </div>
+                </td>
                 <td><strong>{p.name}</strong></td>
                 <td>{p.category}</td>
                 <td>₱{p.price.toFixed(2)}</td>
-                <td>{summary.available_quantity}</td>
+                <td>
+                  {summary.available_quantity}
+                  {/* How that total splits across batches, e.g. 13 = B-3: 10 + B-1: 3. */}
+                  <BatchBreakdown
+                    batches={sellableBatches(batches.filter((batch) => batch.product_id === p.id))}
+                  />
+                </td>
                 <td>
                   {formatExpiry(summary.earliest_expiry_date)}
                   {summary.near_expiry_count > 0 && (
                     <div className="expiry-note">
                       {summary.near_expiry_count} of {summary.available_quantity} stocks nearing expiry
+                      {` · ${NEAR_EXPIRY_PERCENT_OFF}% off at checkout`}
                     </div>
                   )}
                   <details className="batch-details">

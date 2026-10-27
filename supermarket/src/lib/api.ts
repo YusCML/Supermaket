@@ -53,17 +53,20 @@ export const api = {
     return (data ?? []) as ProductBatch[];
   },
 
-  async receiveStock(input: ReceiveStockInput): Promise<void> {
+  // Admin only. Adds a new stock batch. The database always makes up the
+  // batch code (B-1, B-2, ...) and it's unique store-wide; we return it so
+  // the screen can tell the admin which code was given.
+  async receiveStock(input: ReceiveStockInput): Promise<string> {
     const { data, error } = await supabase.rpc('receive_stock', {
       p_product_id: input.product_id,
       p_quantity: input.quantity,
       p_expiry_date: input.expiry_date,
-      p_batch_code: input.batch_code ?? null,
     });
     if (error) throw error;
     if (data && typeof data === 'object' && 'success' in data && data.success === false) {
       throw new Error('Stock could not be received.');
     }
+    return (data as { batch_code?: string } | null)?.batch_code ?? '';
   },
 
   async processExpiredBatches(): Promise<void> {
@@ -163,16 +166,14 @@ export const api = {
     return (data ?? []) as LoyaltyLog[];
   },
 
-  // Admin only. Every product must have a barcode (it's how the POS scans
-  // items). If none was typed in, we leave it out and the database assigns an
-  // in-store one automatically (see the product_barcodes migration). Spaces
-  // are trimmed so a scan matches exactly.
+  // Admin only. Every product needs a barcode (it's how the POS scans items),
+  // and the database always generates it: a unique in-store EAN-13 (see the
+  // batch_choice_and_generated_codes migration). So we never send one, and the
+  // saved product that comes back tells us which barcode it got.
   async addProduct(product: NewProductInput): Promise<Product> {
-    const barcode = product.barcode.trim();
     const payload = {
       ...product,
       sku: product.sku.trim(),
-      barcode: barcode || undefined,
     };
     const { data, error } = await supabase
       .from('products')
@@ -181,10 +182,11 @@ export const api = {
 
     if (error) {
       // Turn the two errors people actually run into into something readable.
-      // 23505 = a unique column (sku / barcode) already has this value.
+      // 23505 = a unique column already has this value (only the SKU can
+      //         clash now, since barcodes are generated).
       // 42501 = the security rules blocked it, i.e. the user isn't an admin.
       if (error.code === '23505') {
-        throw new Error('A product with that SKU or barcode already exists.');
+        throw new Error('A product with that SKU already exists.');
       }
       if (error.code === '42501') {
         throw new Error('Only admins can add products.');
@@ -206,9 +208,12 @@ export const api = {
     const { cart, customerId, pointsToRedeem, paymentMethod } = payload;
 
     const { data, error } = await supabase.rpc('process_pos_checkout', {
+      // batch_id: the batch that was picked; null lets the database take
+      // the soonest-expiring stock.
       p_cart_items: cart.map((item) => ({
         product_id: item.id,
         quantity: item.quantity,
+        batch_id: item.batch_id,
       })),
       p_customer_id: customerId,
       p_points_redeemed: pointsToRedeem,

@@ -34,11 +34,11 @@ export interface ProductInventorySummary extends Product {
   expires_soon: boolean;
 }
 
+// The batch code isn't here on purpose: the database always generates it.
 export interface ReceiveStockInput {
   product_id: number;
   quantity: number;
   expiry_date: string;
-  batch_code?: string;
 }
 
 export interface SalesTrendPoint {
@@ -111,6 +111,13 @@ export interface LoyaltyLog {
 
 export interface CartItem extends Product {
   quantity: number;
+  // Which stock batch these units come from: the batch that was picked (or the
+  // soonest-expiring one, for scans and +), at the till and at self-serve.
+  // null only if the batches weren't known; the database then takes the
+  // soonest-expiring stock.
+  batch_id: number | null;
+  batch_code: string | null;
+  batch_expiry: string | null;
 }
 
 export interface CheckoutPayload {
@@ -120,9 +127,9 @@ export interface CheckoutPayload {
   paymentMethod: 'Cash' | 'Card' | 'Loyalty Points';
 }
 
+// No barcode here: the database always generates one (a unique in-store EAN-13).
 export interface NewProductInput {
   sku: string;
-  barcode: string;
   name: string;
   category: string;
   price: number;
