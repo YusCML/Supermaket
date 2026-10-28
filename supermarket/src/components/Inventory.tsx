@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { NewProductInput, Product, ProductBatch, ProductInventorySummary, ReceiveStockInput, UpdateProductInput, WriteOffStockInput } from '../types/app';
 import { useNotify } from '../contexts/NotifyContext';
 import { formatExpiry, sellableBatches } from '../lib/expiry';
@@ -58,6 +58,12 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editForm, setEditForm] = useState<UpdateProductInput | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  // The edit form opens at the top of the page, but the Edit buttons are in
+  // the table further down. Scroll it into view, or it looks like nothing happened.
+  const editFormRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (editingProduct) editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [editingProduct]);
   const [processingExpired, setProcessingExpired] = useState(false);
   const { notify, askToConfirm } = useNotify();
 
@@ -214,7 +220,7 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
       {!readOnly && (
         <>
           {editingProduct && editForm && (
-            <form className="form-card" onSubmit={handleUpdateProduct} autoComplete="off">
+            <form ref={editFormRef} className="form-card" onSubmit={handleUpdateProduct} autoComplete="off">
               <h3>Edit {editingProduct.name}</h3>
               <div className="form-grid">
                 <input

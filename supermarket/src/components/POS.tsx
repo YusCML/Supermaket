@@ -77,6 +77,13 @@ export default function POS({ products = [], customers = [], batches = [], onChe
   // The product whose details window is open (null = closed).
   const [detailsProductId, setDetailsProductId] = useState<number | null>(null);
 
+  // The picked member as the latest data has them. After a sale the store
+  // data reloads in the background (the POS stays open to show the receipt),
+  // so the copy kept in state would still show their old points balance.
+  const currentMember = selectedCustomer
+    ? customers.find((c) => c.id === selectedCustomer.id) ?? selectedCustomer
+    : null;
+
   // Stops a double-click on "Complete Transaction" from saving the sale twice.
   // A ref (not state) because it has to flip instantly, before React re-renders.
   const isSubmitting = useRef(false);
@@ -346,7 +353,7 @@ export default function POS({ products = [], customers = [], batches = [], onChe
   // The member can't use more points than they have, or more than the bill
   // needs. Clamping here (not only when typing) also covers the case where
   // the cashier removes items after entering points.
-  const redeemablePoints = maxRedeemablePoints(selectedCustomer?.loyalty_points ?? 0, total);
+  const redeemablePoints = maxRedeemablePoints(currentMember?.loyalty_points ?? 0, total);
   const pointsApplied = Math.min(pointsToRedeem, redeemablePoints);
   const discount = discountForPoints(pointsApplied, total);
   const finalTotal = roundToCentavos(total - discount);
@@ -558,11 +565,11 @@ export default function POS({ products = [], customers = [], batches = [], onChe
           </div>
         )}
 
-        {selectedCustomer && (
+        {currentMember && (
           <div className="member-info">
-            👤 <strong>{selectedCustomer.name}</strong> | Points:{' '}
-            {selectedCustomer.loyalty_points ?? 0}
-            {(selectedCustomer.loyalty_points ?? 0) > 0 && (
+            👤 <strong>{currentMember.name}</strong> | Points:{' '}
+            {currentMember.loyalty_points ?? 0}
+            {(currentMember.loyalty_points ?? 0) > 0 && (
               <div className="points-redeem">
                 <label>Redeem Points (₱1/pt): </label>
                 <input
