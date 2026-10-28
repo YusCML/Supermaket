@@ -16,15 +16,15 @@ export default function SelfServePage() {
   const { customers, batches, loading, handleCheckout, posProducts } = useStoreData('customer');
 
   return (
-    <div className="app-container">
+    <div className="flex min-h-screen flex-col bg-[#F5F5F5] font-sans antialiased text-[#333333] selection:bg-[#2E7D32]/15 selection:text-[#2E7D32]">
       <AppHeader role="customer" />
 
       {/* Just the one tab for now, so there's nothing to switch to. */}
       <Navbar tabs={SELF_SERVE_TABS} activeTab="checkout" setActiveTab={() => {}} />
 
-      <main className="content">
+      <main className="flex-1 p-6">
         {loading ? (
-          <div style={{ padding: '20px', textAlign: 'center' }}>
+          <div className="flex items-center justify-center rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-12 text-center text-xs font-semibold text-[#333333]/60 shadow-xs">
             Loading store data…
           </div>
         ) : (
