@@ -1,11 +1,14 @@
 import type { Customer, LoyaltyLog } from '../types/app';
 
 interface LoyaltyProps {
+  // Members list: registered users with active loyalty point balances.
   customers?: Customer[];
+  // Historical ledger log tracking earned and redeemed point events.
   logs?: LoyaltyLog[];
   onRefresh?: () => void;
 }
 
+// Loyalty & Rewards Center component for viewing registered members and auditing point transactions.
 export default function Loyalty({ customers = [], logs = [], onRefresh }: LoyaltyProps) {
   return (
     <div className="p-6 space-y-8 min-h-screen bg-[#F5F5F5] text-[#333333] font-sans antialiased selection:bg-[#2E7D32]/15 selection:text-[#2E7D32]">
@@ -16,7 +19,7 @@ export default function Loyalty({ customers = [], logs = [], onRefresh }: Loyalt
         </h2>
         {onRefresh && (
           <button
-            className="rounded-lg border border-gray-300 bg-[#FFFFFF] px-4 py-2 text-xs font-semibold text-[#333333] hover:bg-gray-50 transition-colors shadow-xs"
+            className="rounded-lg border border-gray-300 bg-[#FFFFFF] px-4 py-2 text-xs font-semibold text-[#333333] hover:bg-gray-50 transition-colors shadow-xs cursor-pointer"
             onClick={onRefresh}
           >
             Refresh Data
