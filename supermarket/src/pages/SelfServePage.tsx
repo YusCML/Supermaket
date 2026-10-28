@@ -2,7 +2,6 @@ import POS from '../components/POS';
 import Navbar, { type NavTab } from '../components/Navbar';
 import AppHeader from '../components/AppHeader';
 import { useStoreData } from '../hooks/useStoreData';
-import '../App.css';
 
 const SELF_SERVE_TABS: NavTab<'checkout'>[] = [
   { id: 'checkout', label: '🛒 Self-Checkout' },
