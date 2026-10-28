@@ -80,161 +80,195 @@ export default function ProductDetails({
   };
 
   return (
-    <div className="confirm-overlay" onMouseDown={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 font-sans antialiased text-[#333333] selection:bg-[#2E7D32]/15 selection:text-[#2E7D32]"
+      onMouseDown={onClose}
+    >
       <div
-        className="product-details"
+        className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-6 shadow-xl space-y-5"
         role="dialog"
         aria-modal="true"
         aria-labelledby="product-details-title"
         // Clicks inside the window shouldn't count as clicking the dark background.
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <div className="product-details-header">
+        {/* Modal Header */}
+        <div className="flex items-start justify-between border-b border-gray-100 pb-3">
           <div>
-            <h3 id="product-details-title">{product.name}</h3>
-            <small>
+            <h3 id="product-details-title" className="text-xl font-bold tracking-tight text-[#333333]">
+              {product.name}
+            </h3>
+            <small className="text-xs text-[#333333]/60">
               {[product.category, product.sku && `SKU ${product.sku}`, product.barcode && `Barcode ${product.barcode}`]
                 .filter(Boolean)
                 .join(' · ')}
             </small>
           </div>
-          <button className="notice-close" onClick={onClose} aria-label="Close">×</button>
+          <button
+            className="flex h-8 w-8 items-center justify-center rounded-full text-lg font-semibold text-[#333333]/50 hover:bg-[#F5F5F5] hover:text-[#333333] transition-colors"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ×
+          </button>
         </div>
 
-        {/* The product's barcode, scannable straight off the screen. */}
-        <div className="product-details-barcode">
-          <BarcodeImage value={product.barcode} />
-        </div>
+        <div className="overflow-y-auto space-y-5 pr-1">
+          {/* Barcode Display */}
+          <div className="flex justify-center rounded-xl bg-[#F5F5F5] p-3 border border-gray-200/60">
+            <BarcodeImage value={product.barcode} />
+          </div>
 
-        <div className="product-details-price">
-          {showSale ? (
-            <>
-              <span className="price-old">₱{product.price.toFixed(2)}</span>{' '}
-              <strong className="price-sale">₱{salePrice.toFixed(2)}</strong>{' '}
-              <span className="badge badge-sale">{NEAR_EXPIRY_PERCENT_OFF}% off</span>
-              <p className="product-details-note">
-                {hasBatches
-                  ? `Batch ${selectedBatch?.batch_code} expires within ${NEAR_EXPIRY_DAYS} days, so it's ${NEAR_EXPIRY_PERCENT_OFF}% off.`
-                  : `${NEAR_EXPIRY_PERCENT_OFF}% off the ${product.near_expiry_count} unit${product.near_expiry_count === 1 ? '' : 's'} expiring within ${NEAR_EXPIRY_DAYS} days. After those, ₱${product.price.toFixed(2)} each.`}
-              </p>
-            </>
-          ) : (
-            <strong>₱{product.price.toFixed(2)}</strong>
-          )}
-        </div>
+          {/* Pricing Info */}
+          <div className="space-y-1">
+            {showSale ? (
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="line-through text-xs text-[#333333]/50">₱{product.price.toFixed(2)}</span>
+                  <strong className="text-lg font-bold text-[#2E7D32]">₱{salePrice.toFixed(2)}</strong>
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200">
+                    {NEAR_EXPIRY_PERCENT_OFF}% off
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-[#333333]/70">
+                  {hasBatches
+                    ? `Batch ${selectedBatch?.batch_code} expires within ${NEAR_EXPIRY_DAYS} days, so it's ${NEAR_EXPIRY_PERCENT_OFF}% off.`
+                    : `${NEAR_EXPIRY_PERCENT_OFF}% off the ${product.near_expiry_count} unit${product.near_expiry_count === 1 ? '' : 's'} expiring within ${NEAR_EXPIRY_DAYS} days. After those, ₱${product.price.toFixed(2)} each.`}
+                </p>
+              </div>
+            ) : (
+              <strong className="text-lg font-bold text-[#333333]">₱{product.price.toFixed(2)}</strong>
+            )}
+          </div>
 
-        <dl className="product-details-facts">
-          <div>
-            <dt>In stock</dt>
-            <dd>
-              {product.stock_quantity}
-              {/* e.g. "13 in 2 batches"; the list below has each batch's count. */}
-              {hasBatches && (
-                <small className="facts-sub">
-                  {' '}in {batches.length} batch{batches.length === 1 ? '' : 'es'}
-                </small>
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt>In basket</dt>
-            <dd>{inBasket}</dd>
-          </div>
-          <div>
-            <dt>Next expiry</dt>
-            <dd>{formatExpiry(product.earliest_expiry_date)}</dd>
-          </div>
-          {product.expired_quantity > 0 && (
+          {/* Key Facts Grid */}
+          <dl className="grid grid-cols-2 gap-3 rounded-xl border border-gray-200 bg-[#F5F5F5] p-3 text-xs">
             <div>
-              <dt>Expired (not for sale)</dt>
-              <dd>{product.expired_quantity}</dd>
+              <dt className="text-[10px] font-bold text-[#333333]/50 uppercase tracking-wider">In stock</dt>
+              <dd className="font-semibold text-[#333333]">
+                {product.stock_quantity}
+                {hasBatches && (
+                  <span className="text-[11px] font-normal text-[#333333]/70">
+                    {' '}in {batches.length} batch{batches.length === 1 ? '' : 'es'}
+                  </span>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-bold text-[#333333]/50 uppercase tracking-wider">In basket</dt>
+              <dd className="font-semibold text-[#333333]">{inBasket}</dd>
+            </div>
+            <div>
+              <dt className="text-[10px] font-bold text-[#333333]/50 uppercase tracking-wider">Next expiry</dt>
+              <dd className="font-semibold text-[#333333]">{formatExpiry(product.earliest_expiry_date)}</dd>
+            </div>
+            {product.expired_quantity > 0 && (
+              <div>
+                <dt className="text-[10px] font-bold text-red-600/70 uppercase tracking-wider">Expired (not for sale)</dt>
+                <dd className="font-semibold text-red-600">{product.expired_quantity}</dd>
+              </div>
+            )}
+          </dl>
+
+          {/* Batches Table */}
+          {hasBatches && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-[#333333]/80">Choose the batch to sell from:</p>
+              <div className="overflow-hidden rounded-xl border border-gray-200 bg-[#FFFFFF]">
+                <table className="w-full text-left text-xs text-[#333333]">
+                  <thead className="bg-[#F5F5F5] border-b border-gray-200 text-[#333333]/70 font-semibold">
+                    <tr>
+                      <th className="px-3 py-2 w-8"></th>
+                      <th className="px-3 py-2">Batch</th>
+                      <th className="px-3 py-2">Available</th>
+                      <th className="px-3 py-2">Expiry</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {batches.map((batch, index) => {
+                      const free = freeIn(batch);
+                      const isSelected = batch.id === selectedBatchId;
+                      return (
+                        <tr
+                          key={batch.id}
+                          className={`transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-[#2E7D32]/10 font-medium'
+                              : free <= 0
+                              ? 'opacity-40 bg-gray-50 cursor-not-allowed'
+                              : 'hover:bg-gray-50'
+                          }`}
+                          onClick={() => selectBatch(batch)}
+                        >
+                          <td className="px-3 py-2 text-center">
+                            <input
+                              type="radio"
+                              name="batch"
+                              className="accent-[#2E7D32] cursor-pointer"
+                              checked={isSelected}
+                              disabled={free <= 0}
+                              onChange={() => selectBatch(batch)}
+                              aria-label={`Sell from batch ${batch.batch_code}`}
+                            />
+                          </td>
+                          <td className="px-3 py-2 font-mono text-[11px]">{batch.batch_code}</td>
+                          <td className="px-3 py-2">
+                            {free}
+                            {free < batch.quantity_remaining && (
+                              <span className="text-[10px] text-[#333333]/60">
+                                {' '}
+                                ({batch.quantity_remaining - free} in basket)
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-[11px]">
+                            {batch.expiry_date
+                              ? daysUntilExpiry(batch.expiry_date) <= 7
+                                ? `${batch.expiry_date} · ${formatExpiry(batch.expiry_date)}`
+                                : batch.expiry_date
+                              : formatExpiry(null)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-1">
+                              {index === 0 && (
+                                <span className="rounded-full bg-[#2E7D32]/10 px-2 py-0.5 text-[9px] font-bold text-[#2E7D32] border border-[#2E7D32]/20">
+                                  Expires first
+                                </span>
+                              )}
+                              {isNearExpiry(batch.expiry_date) && (
+                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold text-amber-800 border border-amber-200">
+                                  {NEAR_EXPIRY_PERCENT_OFF}% off
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
-        </dl>
+        </div>
 
-        {hasBatches && (
-          <>
-            <p className="product-details-note">Choose the batch to sell from:</p>
-            <table className="data-table product-details-batches">
-              <thead>
-                <tr>
-                  <th></th>
-                  <th>Batch</th>
-                  <th>Available</th>
-                  <th>Expiry</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {batches.map((batch, index) => {
-                  const free = freeIn(batch);
-                  const isSelected = batch.id === selectedBatchId;
-                  return (
-                    <tr
-                      key={batch.id}
-                      className={[
-                        'batch-row',
-                        isSelected ? 'is-selected' : '',
-                        free <= 0 ? 'is-empty' : '',
-                      ].filter(Boolean).join(' ')}
-                      onClick={() => selectBatch(batch)}
-                    >
-                      <td>
-                        <input
-                          type="radio"
-                          name="batch"
-                          checked={isSelected}
-                          disabled={free <= 0}
-                          onChange={() => selectBatch(batch)}
-                          aria-label={`Sell from batch ${batch.batch_code}`}
-                        />
-                      </td>
-                      <td>{batch.batch_code}</td>
-                      <td>
-                        {free}
-                        {/* Some of this batch is already in the basket. */}
-                        {free < batch.quantity_remaining && (
-                          <small> ({batch.quantity_remaining - free} in basket)</small>
-                        )}
-                      </td>
-                      <td>
-                        {/* The date, plus "Expires in 3 days" when it's within a
-                            week (further out, the label would just repeat the date). */}
-                        {batch.expiry_date
-                          ? daysUntilExpiry(batch.expiry_date) <= 7
-                            ? `${batch.expiry_date} · ${formatExpiry(batch.expiry_date)}`
-                            : batch.expiry_date
-                          : formatExpiry(null)}
-                      </td>
-                      <td>
-                        {index === 0 && <span className="badge badge-ok">Expires first</span>}{' '}
-                        {isNearExpiry(batch.expiry_date) && (
-                          <span className="badge badge-sale">{NEAR_EXPIRY_PERCENT_OFF}% off</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </>
-        )}
-
-        <div className="product-details-actions">
+        {/* Modal Actions */}
+        <div className="pt-2 border-t border-gray-100 flex items-center justify-end gap-3">
           {canAdd > 0 ? (
             <>
-              <div className="qty-control">
+              <div className="flex items-center gap-1 rounded-xl border border-gray-300 bg-[#FFFFFF] p-1 shadow-2xs">
                 <button
-                  className="btn-sm"
+                  className="h-7 w-7 rounded-lg text-xs font-bold text-[#333333] hover:bg-gray-100 disabled:opacity-30 transition-colors flex items-center justify-center"
                   onClick={() => changeQuantity(quantity - 1)}
                   disabled={quantity <= 1}
                   aria-label="One less"
                 >
                   −
                 </button>
-                <span className="qty-value">{quantity}</span>
+                <span className="w-8 text-center text-xs font-bold text-[#333333]">{quantity}</span>
                 <button
-                  className="btn-sm"
+                  className="h-7 w-7 rounded-lg text-xs font-bold text-[#333333] hover:bg-gray-100 disabled:opacity-30 transition-colors flex items-center justify-center"
                   onClick={() => changeQuantity(quantity + 1)}
                   disabled={quantity >= canAdd}
                   aria-label="One more"
@@ -242,9 +276,10 @@ export default function ProductDetails({
                   +
                 </button>
               </div>
+
               {/* Focused when the window opens, so Enter adds it straight away. */}
               <button
-                className="btn-primary"
+                className="rounded-xl bg-[#2E7D32] px-5 py-2.5 text-xs font-bold text-[#FFFFFF] shadow-xs hover:bg-[#246628] transition-colors cursor-pointer"
                 onClick={() => onAdd(Math.min(quantity, canAdd), selectedBatch ?? undefined)}
                 autoFocus
               >
@@ -252,7 +287,7 @@ export default function ProductDetails({
               </button>
             </>
           ) : (
-            <span className="product-details-note">
+            <span className="text-xs font-semibold text-[#333333]/60">
               {product.stock_quantity <= 0
                 ? 'Out of stock.'
                 : 'All available stock is already in the basket.'}
