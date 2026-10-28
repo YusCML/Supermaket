@@ -177,6 +177,19 @@
   border: 1px solid #ccc;
 }
 
+.cash-received-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.cash-received-field input {
+  padding: 0.6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+}
+
 .form-card {
   background: #f8fafc;
   padding: 1rem;
@@ -932,6 +945,169 @@
 .confirm-actions button {
   padding: 0.55rem 1rem;
   font-size: 0.95rem;
+}
+
+.receipt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.receipt-print-root {
+  width: min(100%, 560px);
+  max-height: 92vh;
+  overflow: auto;
+  padding: 1rem;
+  background: #f1f5f9;
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.receipt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.receipt {
+  padding: 1.5rem;
+  background: #fff;
+  color: #0f172a;
+  border: 1px dashed #94a3b8;
+  font-family: "Courier New", monospace;
+}
+
+.receipt-header,
+.receipt-member,
+.receipt-item,
+.receipt-payment,
+.receipt-points {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.receipt-header {
+  align-items: center;
+  text-align: center;
+  padding-bottom: 1rem;
+  border-bottom: 1px dashed #94a3b8;
+}
+
+.receipt-header h2 {
+  margin: 0 0 0.25rem;
+}
+
+.receipt-header time,
+.receipt-member small,
+.receipt-item-heading small {
+  color: #475569;
+  font-size: 0.85rem;
+}
+
+.receipt-member {
+  padding: 0.85rem 0;
+  border-bottom: 1px dashed #cbd5e1;
+}
+
+.receipt-items {
+  padding: 0.5rem 0;
+  border-bottom: 1px dashed #94a3b8;
+}
+
+.receipt-item {
+  padding: 0.5rem 0;
+}
+
+.receipt-item-heading,
+.receipt-totals > div,
+.receipt-payment > div,
+.receipt-points > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.receipt-item-heading {
+  align-items: baseline;
+}
+
+.receipt-item-math,
+.receipt-item-total,
+.receipt-discount {
+  font-size: 0.9rem;
+}
+
+.receipt-discount {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: #991b1b;
+}
+
+.receipt-totals,
+.receipt-payment {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.85rem 0;
+  border-bottom: 1px dashed #cbd5e1;
+}
+
+.receipt-total-paid {
+  padding-top: 0.5rem;
+  border-top: 1px solid #0f172a;
+  font-size: 1.1rem;
+}
+
+.receipt-points {
+  gap: 0.4rem;
+  padding-top: 0.85rem;
+}
+
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .receipt-print-root,
+  .receipt-print-root * {
+    visibility: visible !important;
+  }
+
+  .receipt-overlay {
+    position: static;
+    display: block;
+    padding: 0;
+    background: transparent;
+  }
+
+  .receipt-print-root {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+    background: #fff;
+    box-shadow: none;
+  }
+
+  .receipt-actions {
+    display: none !important;
+  }
+
+  .receipt {
+    max-width: 80mm;
+    margin: 0 auto;
+    border: none;
+  }
 }
 
 /* Near-expiry markdown: crossed-out old price, sale price, "15% off" badge */

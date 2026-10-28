@@ -134,6 +134,39 @@ export interface CheckoutPayload {
   customerId: string | null;
   pointsToRedeem: number;
   paymentMethod: 'Cash' | 'Card' | 'Loyalty Points';
+  cashReceived: number | null;
+}
+
+export interface CheckoutReceiptItem {
+  product_name: string;
+  quantity: number;
+  unit_price: number;
+  subtotal: number;
+  original_unit_price: number;
+  near_expiry_discount: number;
+  near_expiry_percent_off: number;
+  batch_code: string | null;
+}
+
+export interface CheckoutReceipt {
+  success: true;
+  order_id: number;
+  created_at: string;
+  member_name: string;
+  member_email: string;
+  member_loyalty_id: string | null;
+  points_balance: number;
+  points_earned: number;
+  points_redeemed: number;
+  subtotal: number;
+  near_expiry_savings: number;
+  total_amount: number;
+  points_discount: number;
+  total_paid: number;
+  payment_method: CheckoutPayload['paymentMethod'];
+  cash_received: number | null;
+  change: number | null;
+  items: CheckoutReceiptItem[];
 }
 
 // No barcode here: the database always generates one (a unique in-store EAN-13).

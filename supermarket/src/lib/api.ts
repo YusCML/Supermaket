@@ -6,6 +6,7 @@ import type {
   Customer,
   LoyaltyLog,
   CheckoutPayload,
+  CheckoutReceipt,
   NewProductInput,
   ProductInventorySummary,
   ReceiveStockInput,
@@ -249,7 +250,7 @@ export const api = {
   // If anything is wrong (out of stock, not enough points...), the database
   // cancels the whole sale and its error message comes back here, so the POS
   // can show it to the cashier.
-  async processCheckout(payload: CheckoutPayload) {
+  async processCheckout(payload: CheckoutPayload): Promise<CheckoutReceipt> {
     const { cart, customerId, pointsToRedeem, paymentMethod } = payload;
 
     const { data, error } = await supabase.rpc('process_pos_checkout', {
@@ -263,9 +264,12 @@ export const api = {
       p_customer_id: customerId,
       p_points_redeemed: pointsToRedeem,
       p_payment_method: paymentMethod,
+      p_cash_received: payload.cashReceived,
     });
     if (error) throw error;
-    // { success, order_id, points_earned, points_redeemed, total_amount, final_amount }
-    return data;
+    if (!data || typeof data !== 'object' || Array.isArray(data) || !Array.isArray(data.items)) {
+      throw new Error('Checkout completed, but the database did not return receipt details.');
+    }
+    return data as CheckoutReceipt;
   },
 };
