@@ -15,6 +15,7 @@ import type {
   ReceiveStockInput,
   SalesAnalytics,
   UpdateProductInput,
+  WriteOffStockInput,
 } from '../types/app';
 import '../App.css';
 
@@ -157,6 +158,11 @@ export default function AdminPage() {
     await loadData();
   };
 
+  const handleWriteOffStock = async (input: WriteOffStockInput) => {
+    await api.writeOffStock(input);
+    await loadData();
+  };
+
   const handleProcessExpired = async () => {
     await api.processExpiredBatches();
     await loadData();
@@ -201,6 +207,7 @@ export default function AdminPage() {
                 onAddProduct={handleAddProduct}
                 onUpdateProduct={handleUpdateProduct}
                 onReceiveStock={handleReceiveStock}
+                onWriteOffStock={handleWriteOffStock}
                 onProcessExpired={handleProcessExpired}
                 onRefresh={loadData}
               />

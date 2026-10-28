@@ -11,6 +11,7 @@ import type {
   ReceiveStockInput,
   SalesAnalytics,
   UpdateProductInput,
+  WriteOffStockInput,
 } from '../types/app';
 
 // Every call the app makes to the database lives here.
@@ -73,6 +74,21 @@ export const api = {
   async processExpiredBatches(): Promise<void> {
     const { error } = await supabase.rpc('process_expired_batches');
     if (error) throw error;
+  },
+
+  async writeOffStock(input: WriteOffStockInput): Promise<void> {
+    const { error } = await supabase.rpc('write_off_stock', {
+      p_batch_id: input.batch_id,
+      p_quantity: input.quantity,
+      p_kind: input.kind,
+      p_reason: input.reason,
+    });
+    if (error) {
+      if (error.code === 'PGRST202') {
+        throw new Error('Writing off stock needs a database update that has not been applied yet.');
+      }
+      throw error;
+    }
   },
 
   async getSalesAnalytics(): Promise<SalesAnalytics> {

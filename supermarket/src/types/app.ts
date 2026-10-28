@@ -41,6 +41,15 @@ export interface ReceiveStockInput {
   expiry_date: string;
 }
 
+export type StockWriteOffKind = 'damaged' | 'spoiled';
+
+export interface WriteOffStockInput {
+  batch_id: number;
+  quantity: number;
+  kind: StockWriteOffKind;
+  reason: string;
+}
+
 export interface SalesTrendPoint {
   date: string;
   revenue: number;
