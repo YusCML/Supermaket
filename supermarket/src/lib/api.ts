@@ -6,10 +6,13 @@ import type {
   Customer,
   LoyaltyLog,
   CheckoutPayload,
+  CheckoutReceipt,
   NewProductInput,
   ProductInventorySummary,
   ReceiveStockInput,
   SalesAnalytics,
+  UpdateProductInput,
+  WriteOffStockInput,
 } from '../types/app';
 
 // Every call the app makes to the database lives here.
@@ -72,6 +75,21 @@ export const api = {
   async processExpiredBatches(): Promise<void> {
     const { error } = await supabase.rpc('process_expired_batches');
     if (error) throw error;
+  },
+
+  async writeOffStock(input: WriteOffStockInput): Promise<void> {
+    const { error } = await supabase.rpc('write_off_stock', {
+      p_batch_id: input.batch_id,
+      p_quantity: input.quantity,
+      p_kind: input.kind,
+      p_reason: input.reason,
+    });
+    if (error) {
+      if (error.code === 'PGRST202') {
+        throw new Error('Writing off stock needs a database update that has not been applied yet.');
+      }
+      throw error;
+    }
   },
 
   async getSalesAnalytics(): Promise<SalesAnalytics> {
@@ -196,6 +214,34 @@ export const api = {
     return (data?.[0] ?? null) as Product;
   },
 
+  // Admin only. Barcode and stock quantity deliberately aren't editable here:
+  // barcodes are permanent and stock belongs to the batch receiving workflow.
+  async updateProduct(productId: number, product: UpdateProductInput): Promise<Product> {
+    const { data, error } = await supabase
+      .from('products')
+      .update({
+        ...product,
+        sku: product.sku.trim(),
+        name: product.name.trim(),
+        category: product.category.trim(),
+      })
+      .eq('id', productId)
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === '23505') {
+        throw new Error('A product with that SKU already exists.');
+      }
+      if (error.code === '42501') {
+        throw new Error('Only admins can edit products.');
+      }
+      throw error;
+    }
+
+    return data as Product;
+  },
+
   // Saves a sale. We only send WHAT is being bought, WHO the member is and how
   // many points to use. The database looks up the real prices, checks stock,
   // works out the totals and updates the member's points, all in one go (see
@@ -204,7 +250,7 @@ export const api = {
   // If anything is wrong (out of stock, not enough points...), the database
   // cancels the whole sale and its error message comes back here, so the POS
   // can show it to the cashier.
-  async processCheckout(payload: CheckoutPayload) {
+  async processCheckout(payload: CheckoutPayload): Promise<CheckoutReceipt> {
     const { cart, customerId, pointsToRedeem, paymentMethod } = payload;
 
     const { data, error } = await supabase.rpc('process_pos_checkout', {
@@ -218,9 +264,12 @@ export const api = {
       p_customer_id: customerId,
       p_points_redeemed: pointsToRedeem,
       p_payment_method: paymentMethod,
+      p_cash_received: payload.cashReceived,
     });
     if (error) throw error;
-    // { success, order_id, points_earned, points_redeemed, total_amount, final_amount }
-    return data;
+    if (!data || typeof data !== 'object' || Array.isArray(data) || !Array.isArray(data.items)) {
+      throw new Error('Checkout completed, but the database did not return receipt details.');
+    }
+    return data as CheckoutReceipt;
   },
 };

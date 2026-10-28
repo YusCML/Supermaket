@@ -1,5 +1,5 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
-import type { ProductInventorySummary, ProductBatch, Customer, CartItem, CheckoutPayload } from '../types/app';
+import type { ProductInventorySummary, ProductBatch, Customer, CartItem, CheckoutPayload, CheckoutReceipt } from '../types/app';
 import { discountForPoints, maxRedeemablePoints, roundToCentavos } from '../lib/loyalty';
 import { markedDownPrice, NEAR_EXPIRY_PERCENT_OFF, priceLine } from '../lib/pricing';
 import { formatExpiry, isNearExpiry, sellableBatches } from '../lib/expiry';
@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNotify } from '../contexts/NotifyContext';
 import ProductDetails from './ProductDetails';
 import BatchBreakdown from './BatchBreakdown';
+import Receipt from './Receipt';
 
 interface POSProps {
   products: ProductInventorySummary[];
@@ -14,7 +15,7 @@ interface POSProps {
   // Stock batches: picked from in the product details window, and shown as
   // per-batch counts on the product cards. Everyone gets them (till and self-serve).
   batches?: ProductBatch[];
-  onCheckout: (payload: CheckoutPayload) => Promise<void>;
+  onCheckout: (payload: CheckoutPayload) => Promise<CheckoutReceipt>;
   // 'self-serve': a customer buying for themselves. The sale always goes on
   //   their own loyalty account, so there's no member lookup at all.
   // 'staff': a cashier or admin at the till. They look the customer up by
@@ -67,12 +68,21 @@ export default function POS({ products = [], customers = [], batches = [], onChe
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(startingMember);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'Loyalty Points'>('Cash');
+  const [cashReceivedInput, setCashReceivedInput] = useState('');
+  const [receipt, setReceipt] = useState<CheckoutReceipt | null>(null);
   // The member suggestion list: whether it's open, and which row the arrow
   // keys have highlighted (-1 = none).
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [highlighted, setHighlighted] = useState(-1);
   // The product whose details window is open (null = closed).
   const [detailsProductId, setDetailsProductId] = useState<number | null>(null);
+
+  // The picked member as the latest data has them. After a sale the store
+  // data reloads in the background (the POS stays open to show the receipt),
+  // so the copy kept in state would still show their old points balance.
+  const currentMember = selectedCustomer
+    ? customers.find((c) => c.id === selectedCustomer.id) ?? selectedCustomer
+    : null;
 
   // Stops a double-click on "Complete Transaction" from saving the sale twice.
   // A ref (not state) because it has to flip instantly, before React re-renders.
@@ -343,7 +353,7 @@ export default function POS({ products = [], customers = [], batches = [], onChe
   // The member can't use more points than they have, or more than the bill
   // needs. Clamping here (not only when typing) also covers the case where
   // the cashier removes items after entering points.
-  const redeemablePoints = maxRedeemablePoints(selectedCustomer?.loyalty_points ?? 0, total);
+  const redeemablePoints = maxRedeemablePoints(currentMember?.loyalty_points ?? 0, total);
   const pointsApplied = Math.min(pointsToRedeem, redeemablePoints);
   const discount = discountForPoints(pointsApplied, total);
   const finalTotal = roundToCentavos(total - discount);
@@ -400,21 +410,34 @@ export default function POS({ products = [], customers = [], batches = [], onChe
       }
     }
 
+    let cashReceived: number | null = null;
+    if (paymentMethod === 'Cash') {
+      if (!cashReceivedInput.trim() || !Number.isFinite(Number(cashReceivedInput))) {
+        return notify('Enter the cash amount received.', 'error');
+      }
+      cashReceived = roundToCentavos(Number(cashReceivedInput));
+      if (cashReceived < finalTotal) {
+        return notify(`Cash received must be at least ₱${finalTotal.toFixed(2)}.`, 'error');
+      }
+    }
+
     isSubmitting.current = true;
     try {
-      await onCheckout({
+      const savedReceipt = await onCheckout({
         cart,
         customerId: selectedCustomer?.id ?? null,
         pointsToRedeem: pointsApplied,
         paymentMethod,
+        cashReceived,
       });
-      notify('Checkout completed successfully!', 'success');
+      setReceipt(savedReceipt);
       setCart([]);
       // Back to the start for the next sale: your own account at self-serve,
       // an empty member box at the till.
       setSelectedCustomer(startingMember);
       setPointsToRedeem(0);
       setPhoneSearch('');
+      setCashReceivedInput('');
     } catch (err) {
       // Messages like "Not enough stock for ..." come straight from the database.
       notify(err instanceof Error ? err.message : 'Checkout failed', 'error');
@@ -542,11 +565,11 @@ export default function POS({ products = [], customers = [], batches = [], onChe
           </div>
         )}
 
-        {selectedCustomer && (
+        {currentMember && (
           <div className="member-info">
-            👤 <strong>{selectedCustomer.name}</strong> | Points:{' '}
-            {selectedCustomer.loyalty_points ?? 0}
-            {(selectedCustomer.loyalty_points ?? 0) > 0 && (
+            👤 <strong>{currentMember.name}</strong> | Points:{' '}
+            {currentMember.loyalty_points ?? 0}
+            {(currentMember.loyalty_points ?? 0) > 0 && (
               <div className="points-redeem">
                 <label>Redeem Points (₱1/pt): </label>
                 <input
@@ -636,6 +659,21 @@ export default function POS({ products = [], customers = [], batches = [], onChe
             <option value="Loyalty Points">Loyalty Points</option>
           </select>
 
+          {paymentMethod === 'Cash' && (
+            <label className="cash-received-field">
+              Cash received
+              <input
+                type="number"
+                min={finalTotal}
+                step="0.01"
+                value={cashReceivedInput}
+                onChange={(e) => setCashReceivedInput(e.target.value)}
+                autoComplete="off"
+                required
+              />
+            </label>
+          )}
+
           <button className="btn-primary checkout-btn" onClick={handleCheckoutSubmit}>
             Complete Transaction
           </button>
@@ -653,6 +691,13 @@ export default function POS({ products = [], customers = [], batches = [], onChe
             setDetailsProductId(null);
           }}
           onClose={() => setDetailsProductId(null)}
+        />
+      )}
+      {receipt && (
+        <Receipt
+          receipt={receipt}
+          cashReceived={receipt.cash_received}
+          onClose={() => setReceipt(null)}
         />
       )}
     </div>
