@@ -446,240 +446,322 @@ export default function POS({ products = [], customers = [], batches = [], onChe
     }
   };
 
+  const inputStyle =
+    'w-full rounded-xl border border-gray-300 bg-[#FFFFFF] px-3.5 py-2 text-xs text-[#333333] placeholder-[#333333]/40 outline-none transition-all focus:border-[#2E7D32] focus:ring-2 focus:ring-[#2E7D32]/20 shadow-2xs';
+
   return (
-    <div className="pos-layout">
-      <div className="pos-left">
-        <h2>Items Lookup</h2>
-        <input
-          type="text"
-          placeholder="Scan barcode, SKU, or search product name..."
-          className="search-bar"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') handleScan();
-          }}
-          // No browser pop-up of old searches covering the product grid, and no
-          // red spell-check lines under barcodes.
-          autoComplete="off"
-          spellCheck={false}
-        />
-        <div className="product-grid">
-          {filteredProducts.length === 0 ? (
-            <p className="no-products">No products found</p>
-          ) : (
-            filteredProducts.map((p) => (
-              <div key={p.id} className="product-card" onClick={() => setDetailsProductId(p.id)}>
-                <h4>{p.name}</h4>
-                {/* The barcode number, so it can be checked against the label. */}
-                <div className="product-barcode">{p.barcode}</div>
-                {p.near_expiry_count > 0 ? (
-                  // Near-expiry stock: show the old price crossed out and the
-                  // 15% off price, so shoppers notice the deal.
-                  <p>
-                    <span className="price-old">₱{(p.price || 0).toFixed(2)}</span>{' '}
-                    <strong className="price-sale">₱{markedDownPrice(p.price || 0).toFixed(2)}</strong>
-                  </p>
-                ) : (
-                  <p>₱{(p.price || 0).toFixed(2)}</p>
-                )}
-                <small>Stock: {p.stock_quantity}</small>
-                {/* How the stock splits across batches, e.g. B-3: 10, B-1: 3. */}
-                <BatchBreakdown batches={sellableBatchesOf(p.id)} />
-                {p.near_expiry_count > 0 && (
-                  <div>
-                    <span className="badge badge-sale">
-                      {NEAR_EXPIRY_PERCENT_OFF}% off · {p.near_expiry_count} expiring soon
-                    </span>
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      <div className="pos-right">
-        <h2>Active Basket</h2>
-
-        {/* Self-serve shoppers can't put the sale on someone else's account,
-            so they don't get the lookup box. */}
-        {!isSelfServe && (
-          <div className="customer-panel">
-            <div className="member-search">
-              <input
-                // Chrome reads the hint text to guess what a box is for. Words
-                // like "email" or "phone" make it pop up its own saved-address
-                // list (even with autoComplete off), so the hint avoids them.
-                // The search still matches names, loyalty IDs, phones and emails.
-                placeholder="Search member or scan loyalty card"
-                value={phoneSearch}
-                onChange={(e) => handleMemberInput(e.target.value)}
-                onFocus={() => setShowSuggestions(true)}
-                onBlur={() => setShowSuggestions(false)}
-                // Enter (or scanning a loyalty card) looks the member up, same as the button.
-                onKeyDown={handleMemberKeyDown}
-                // Our own suggestion list replaces the browser's, so turn that off.
-                autoComplete="off"
-                spellCheck={false}
-                role="combobox"
-                aria-autocomplete="list"
-                aria-expanded={suggestionsOpen}
-                aria-controls="member-suggestions"
-              />
-
-              {suggestionsOpen && (
-                <ul className="member-suggestions" id="member-suggestions" role="listbox">
-                  {memberSuggestions.length === 0 ? (
-                    <li className="member-suggestion-empty">No members match</li>
-                  ) : (
-                    memberSuggestions.map((c, index) => (
-                      <li
-                        key={c.id}
-                        role="option"
-                        aria-selected={index === highlighted}
-                        className={`member-suggestion${index === highlighted ? ' is-active' : ''}`}
-                        // onMouseDown rather than onClick: it fires before the box
-                        // loses focus, which would close the list first.
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          selectMember(c);
-                        }}
-                        onMouseEnter={() => setHighlighted(index)}
-                      >
-                        <strong>{c.name || c.email}</strong>
-                        <small>
-                          {/* Name falls back to the email, so don't show it twice. */}
-                          {[c.loyalty_id, c.phone, c.name !== c.email ? c.email : null]
-                            .filter(Boolean)
-                            .join(' · ')}
-                          {' · '}{c.loyalty_points ?? 0} pts
-                        </small>
-                      </li>
-                    ))
-                  )}
-                </ul>
-              )}
-            </div>
-            <button onClick={findCustomer}>Lookup Member</button>
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[calc(100vh-6rem)] font-sans antialiased text-[#333333] selection:bg-[#2E7D32]/15 selection:text-[#2E7D32]">
+      {/* Left Column: Items Lookup & Product Catalog */}
+      <div className="lg:col-span-7 xl:col-span-8 flex flex-col space-y-4">
+        <div className="rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-5 shadow-2xs space-y-4 flex-1 flex flex-col">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold tracking-tight text-[#333333]">Items Lookup</h2>
           </div>
-        )}
 
-        {currentMember && (
-          <div className="member-info">
-            👤 <strong>{currentMember.name}</strong> | Points:{' '}
-            {currentMember.loyalty_points ?? 0}
-            {(currentMember.loyalty_points ?? 0) > 0 && (
-              <div className="points-redeem">
-                <label>Redeem Points (₱1/pt): </label>
-                <input
-                  type="number"
-                  max={redeemablePoints}
-                  min="0"
-                  value={pointsApplied}
-                  onChange={(e) => handlePointsChange(e.target.value)}
-                  autoComplete="off"
-                />
-              </div>
+          <input
+            type="text"
+            placeholder="Scan barcode, SKU, or search product name..."
+            className={inputStyle}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleScan();
+            }}
+            autoComplete="off"
+            spellCheck={false}
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 flex-1 overflow-y-auto max-h-[650px] pr-1">
+            {filteredProducts.length === 0 ? (
+              <p className="col-span-full py-12 text-center text-xs font-semibold text-[#333333]/50">
+                No products found
+              </p>
+            ) : (
+              filteredProducts.map((p) => (
+                <div
+                  key={p.id}
+                  className="flex flex-col justify-between rounded-xl border border-gray-200/80 bg-[#FFFFFF] p-3.5 shadow-2xs hover:border-[#2E7D32]/50 hover:bg-[#2E7D32]/5 transition-all cursor-pointer space-y-2 group"
+                  onClick={() => setDetailsProductId(p.id)}
+                >
+                  <div>
+                    <h4 className="text-xs font-bold text-[#333333] group-hover:text-[#2E7D32] transition-colors line-clamp-1">
+                      {p.name}
+                    </h4>
+                    <div className="font-mono text-[10px] text-[#333333]/60">{p.barcode}</div>
+                  </div>
+
+                  <div className="space-y-1">
+                    {p.near_expiry_count > 0 ? (
+                      <p className="text-xs">
+                        <span className="line-through text-[#333333]/50 mr-1.5">
+                          ₱{(p.price || 0).toFixed(2)}
+                        </span>
+                        <strong className="font-extrabold text-[#2E7D32]">
+                          ₱{markedDownPrice(p.price || 0).toFixed(2)}
+                        </strong>
+                      </p>
+                    ) : (
+                      <p className="text-xs font-bold text-[#333333]">₱{(p.price || 0).toFixed(2)}</p>
+                    )}
+                    <small className="block text-[10px] text-[#333333]/70 font-medium">
+                      Stock: {p.stock_quantity}
+                    </small>
+                    <BatchBreakdown batches={sellableBatchesOf(p.id)} />
+                    {p.near_expiry_count > 0 && (
+                      <div className="pt-1">
+                        <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold text-amber-800 border border-amber-200">
+                          {NEAR_EXPIRY_PERCENT_OFF}% off · {p.near_expiry_count} expiring soon
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
             )}
           </div>
-        )}
-
-        <div className="cart-list">
-          {cart.length === 0 ? (
-            <p className="empty-cart">Basket is empty</p>
-          ) : (
-            cart.map((item) => (
-              <div key={lineKey(item)} className="cart-item">
-                <div>
-                  <strong>{item.name}</strong>
-                  {/* Which batch this line comes from. */}
-                  {item.batch_code && (
-                    <div className="cart-batch">
-                      Batch {item.batch_code} · {formatExpiry(item.batch_expiry)}
-                    </div>
-                  )}
-                  <div className="qty-control">
-                    <button
-                      className="btn-sm"
-                      onClick={() => decreaseQuantity(lineKey(item))}
-                      disabled={item.quantity <= 1}
-                      aria-label={`One less ${item.name}`}
-                    >
-                      −
-                    </button>
-                    <span className="qty-value">{item.quantity}</span>
-                    <button
-                      className="btn-sm"
-                      onClick={() => increaseQuantity(item)}
-                      // Greyed out once there's no more stock (in this batch).
-                      disabled={!canAddOneMore(item)}
-                      aria-label={`One more ${item.name}`}
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <span>₱{lineTotalOf(item).toFixed(2)} </span>
-                  <button className="btn-sm btn-danger" onClick={() => removeFromCart(lineKey(item))}>
-                    ×
-                  </button>
-                  {/* Say which units got the markdown, e.g. "2 × ₱80.75 (15% off)". */}
-                  {markedDownQtyOf(item) > 0 && (
-                    <div className="cart-markdown">
-                      {markedDownQtyOf(item)} × ₱{markedDownPrice(item.price || 0).toFixed(2)}{' '}
-                      ({NEAR_EXPIRY_PERCENT_OFF}% off, near expiry)
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="summary">
-          <div>Subtotal: ₱{fullPriceTotal.toFixed(2)}</div>
-          {nearExpirySavings > 0 && (
-            <div className="summary-markdown">
-              Near-expiry {NEAR_EXPIRY_PERCENT_OFF}% off: -₱{nearExpirySavings.toFixed(2)}
-            </div>
-          )}
-          <div>Points discount: -₱{discount.toFixed(2)}</div>
-          <h3>Total: ₱{finalTotal.toFixed(2)}</h3>
-
-          <select
-            value={paymentMethod}
-            onChange={(e) =>
-              setPaymentMethod(e.target.value as 'Cash' | 'Card' | 'Loyalty Points')
-            }
-          >
-            <option value="Cash">Cash</option>
-            <option value="Card">Card</option>
-            <option value="Loyalty Points">Loyalty Points</option>
-          </select>
-
-          {paymentMethod === 'Cash' && (
-            <label className="cash-received-field">
-              Cash received
-              <input
-                type="number"
-                min={finalTotal}
-                step="0.01"
-                value={cashReceivedInput}
-                onChange={(e) => setCashReceivedInput(e.target.value)}
-                autoComplete="off"
-                required
-              />
-            </label>
-          )}
-
-          <button className="btn-primary checkout-btn" onClick={handleCheckoutSubmit}>
-            Complete Transaction
-          </button>
         </div>
       </div>
 
+      {/* Right Column: Member Panel & Active Cart */}
+      <div className="lg:col-span-5 xl:col-span-4 flex flex-col space-y-4">
+        <div className="rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-5 shadow-2xs space-y-4 flex-1 flex flex-col justify-between">
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold tracking-tight text-[#333333]">Active Basket</h2>
+
+            {/* Member Search / Selection */}
+            {!isSelfServe && (
+              <div className="rounded-xl border border-gray-200 bg-[#F5F5F5] p-3 space-y-2">
+                <div className="relative">
+                  <input
+                    placeholder="Search member or scan loyalty card"
+                    className={inputStyle}
+                    value={phoneSearch}
+                    onChange={(e) => handleMemberInput(e.target.value)}
+                    onFocus={() => setShowSuggestions(true)}
+                    onBlur={() => setShowSuggestions(false)}
+                    onKeyDown={handleMemberKeyDown}
+                    autoComplete="off"
+                    spellCheck={false}
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-expanded={suggestionsOpen}
+                    aria-controls="member-suggestions"
+                  />
+
+                  {suggestionsOpen && (
+                    <ul
+                      className="absolute left-0 right-0 z-30 mt-1 max-h-48 overflow-y-auto rounded-xl border border-gray-200 bg-[#FFFFFF] py-1 shadow-lg divide-y divide-gray-100"
+                      id="member-suggestions"
+                      role="listbox"
+                    >
+                      {memberSuggestions.length === 0 ? (
+                        <li className="px-3 py-2 text-center text-xs text-[#333333]/50">
+                          No members match
+                        </li>
+                      ) : (
+                        memberSuggestions.map((c, index) => (
+                          <li
+                            key={c.id}
+                            role="option"
+                            aria-selected={index === highlighted}
+                            className={`px-3 py-2 text-xs transition-colors cursor-pointer ${
+                              index === highlighted ? 'bg-[#2E7D32]/10 text-[#2E7D32]' : 'hover:bg-gray-50'
+                            }`}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              selectMember(c);
+                            }}
+                            onMouseEnter={() => setHighlighted(index)}
+                          >
+                            <strong className="block font-semibold text-[#333333]">
+                              {c.name || c.email}
+                            </strong>
+                            <small className="block text-[10px] text-[#333333]/60">
+                              {[c.loyalty_id, c.phone, c.name !== c.email ? c.email : null]
+                                .filter(Boolean)
+                                .join(' · ')}
+                              {' · '}{c.loyalty_points ?? 0} pts
+                            </small>
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={findCustomer}
+                  className="w-full rounded-lg border border-gray-300 bg-[#FFFFFF] py-1.5 text-xs font-semibold text-[#333333] shadow-2xs hover:bg-gray-100 transition-colors"
+                >
+                  Lookup Member
+                </button>
+              </div>
+            )}
+
+            {/* Selected Member Loyalty Panel */}
+            {currentMember && (
+              <div className="rounded-xl border border-[#2E7D32]/20 bg-[#2E7D32]/5 p-3 text-xs space-y-2">
+                <div className="flex items-center justify-between text-[#333333]">
+                  <span>
+                    👤 <strong className="font-bold">{currentMember.name}</strong>
+                  </span>
+                  <span className="font-semibold text-[#2E7D32]">
+                    Points: {currentMember.loyalty_points ?? 0}
+                  </span>
+                </div>
+                {(currentMember.loyalty_points ?? 0) > 0 && (
+                  <div className="flex items-center justify-between gap-2 border-t border-[#2E7D32]/15 pt-2">
+                    <label className="text-[11px] font-medium text-[#333333]/80">
+                      Redeem Points (₱1/pt):
+                    </label>
+                    <input
+                      type="number"
+                      max={redeemablePoints}
+                      min="0"
+                      value={pointsApplied}
+                      onChange={(e) => handlePointsChange(e.target.value)}
+                      autoComplete="off"
+                      className="w-20 rounded-lg border border-gray-300 bg-[#FFFFFF] px-2 py-1 text-right text-xs font-bold text-[#2E7D32] outline-none focus:border-[#2E7D32]"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Cart Line Items */}
+            <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1 divide-y divide-gray-100">
+              {cart.length === 0 ? (
+                <p className="py-8 text-center text-xs font-semibold text-[#333333]/40">
+                  Basket is empty
+                </p>
+              ) : (
+                cart.map((item) => (
+                  <div key={lineKey(item)} className="pt-2.5 first:pt-0 flex items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <strong className="block text-xs font-bold text-[#333333]">{item.name}</strong>
+                      {item.batch_code && (
+                        <div className="text-[10px] font-mono text-[#333333]/60">
+                          Batch {item.batch_code} · {formatExpiry(item.batch_expiry)}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="h-5 w-5 rounded-md border border-gray-300 bg-[#FFFFFF] text-xs font-bold text-[#333333] hover:bg-gray-100 disabled:opacity-30 transition-colors flex items-center justify-center"
+                          onClick={() => decreaseQuantity(lineKey(item))}
+                          disabled={item.quantity <= 1}
+                          aria-label={`One less ${item.name}`}
+                        >
+                          −
+                        </button>
+                        <span className="w-6 text-center text-xs font-bold text-[#333333]">
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          className="h-5 w-5 rounded-md border border-gray-300 bg-[#FFFFFF] text-xs font-bold text-[#333333] hover:bg-gray-100 disabled:opacity-30 transition-colors flex items-center justify-center"
+                          onClick={() => increaseQuantity(item)}
+                          disabled={!canAddOneMore(item)}
+                          aria-label={`One more ${item.name}`}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="text-right space-y-1">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span className="text-xs font-bold text-[#333333]">
+                          ₱{lineTotalOf(item).toFixed(2)}
+                        </span>
+                        <button
+                          type="button"
+                          className="text-xs font-bold text-red-500 hover:text-red-700 px-1"
+                          onClick={() => removeFromCart(lineKey(item))}
+                        >
+                          ×
+                        </button>
+                      </div>
+                      {markedDownQtyOf(item) > 0 && (
+                        <div className="text-[9px] font-medium text-amber-700">
+                          {markedDownQtyOf(item)} × ₱{markedDownPrice(item.price || 0).toFixed(2)}{' '}
+                          ({NEAR_EXPIRY_PERCENT_OFF}% off)
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Checkout Totals & Payment Controls */}
+          <div className="space-y-3 border-t border-gray-200 pt-4 mt-auto">
+            <div className="space-y-1 text-xs text-[#333333]/80">
+              <div className="flex justify-between">
+                <span>Subtotal</span>
+                <span className="font-semibold text-[#333333]">₱{fullPriceTotal.toFixed(2)}</span>
+              </div>
+              {nearExpirySavings > 0 && (
+                <div className="flex justify-between text-amber-700 font-medium">
+                  <span>Near-expiry {NEAR_EXPIRY_PERCENT_OFF}% off</span>
+                  <span>-₱{nearExpirySavings.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-[#2E7D32] font-medium">
+                <span>Points discount</span>
+                <span>-₱{discount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-base font-extrabold text-[#333333] pt-1">
+                <span>Total</span>
+                <span className="text-[#2E7D32]">₱{finalTotal.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <select
+                value={paymentMethod}
+                onChange={(e) =>
+                  setPaymentMethod(e.target.value as 'Cash' | 'Card' | 'Loyalty Points')
+                }
+                className={inputStyle}
+              >
+                <option value="Cash">Cash</option>
+                <option value="Card">Card</option>
+                <option value="Loyalty Points">Loyalty Points</option>
+              </select>
+
+              {paymentMethod === 'Cash' && (
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-[#333333]/60">
+                    Cash received
+                  </label>
+                  <input
+                    type="number"
+                    min={finalTotal}
+                    step="0.01"
+                    value={cashReceivedInput}
+                    onChange={(e) => setCashReceivedInput(e.target.value)}
+                    autoComplete="off"
+                    className={inputStyle}
+                    required
+                  />
+                </div>
+              )}
+
+              <button
+                type="button"
+                className="w-full rounded-xl bg-[#2E7D32] py-3 text-xs font-bold text-[#FFFFFF] shadow-xs hover:bg-[#246628] transition-colors cursor-pointer"
+                onClick={handleCheckoutSubmit}
+              >
+                Complete Transaction
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Modals */}
       {detailsProduct && (
         <ProductDetails
           product={detailsProduct}

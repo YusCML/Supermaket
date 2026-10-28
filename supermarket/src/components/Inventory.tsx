@@ -51,7 +51,18 @@ const emptyWriteOff = {
   reason: '',
 };
 
-export default function Inventory({ products, inventory, batches, readOnly = false, onAddProduct, onUpdateProduct, onReceiveStock, onWriteOffStock, onProcessExpired, onRefresh }: InventoryProps) {
+export default function Inventory({
+  products,
+  inventory,
+  batches,
+  readOnly = false,
+  onAddProduct,
+  onUpdateProduct,
+  onReceiveStock,
+  onWriteOffStock,
+  onProcessExpired,
+  onRefresh,
+}: InventoryProps) {
   const [form, setForm] = useState(emptyForm);
   const [receiveForm, setReceiveForm] = useState(emptyReceive);
   const [writeOffForm, setWriteOffForm] = useState(emptyWriteOff);
@@ -74,6 +85,7 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!onAddProduct) return;
     try {
       const saved = await onAddProduct({
         sku: form.sku,
@@ -93,6 +105,7 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
 
   const handleReceive = async (e: FormEvent) => {
     e.preventDefault();
+    if (!onReceiveStock) return;
     if (!receiveForm.product_id || !receiveForm.quantity || !receiveForm.expiry_date) {
       notify('Select a product, quantity, and expiry date before receiving stock.', 'error');
       return;
@@ -111,10 +124,11 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
     }
   };
 
-  const writeOffBatchChoices = batches.filter((batch) =>
-    batch.product_id === Number(writeOffForm.product_id) &&
-    batch.status === 'active' &&
-    batch.quantity_remaining > 0
+  const writeOffBatchChoices = batches.filter(
+    (batch) =>
+      batch.product_id === Number(writeOffForm.product_id) &&
+      batch.status === 'active' &&
+      batch.quantity_remaining > 0
   );
 
   const handleWriteOff = async (e: FormEvent) => {
@@ -195,7 +209,7 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
   };
 
   const handleProcessExpired = async () => {
-    if (processingExpired) return;
+    if (processingExpired || !onProcessExpired) return;
     setProcessingExpired(true);
     try {
       await onProcessExpired();
@@ -207,38 +221,57 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
     }
   };
 
+  const inputStyle =
+    'w-full rounded-lg border border-gray-300 bg-[#FFFFFF] px-3 py-2 text-xs text-[#333333] placeholder-[#333333]/40 outline-none transition-all focus:border-[#2E7D32] focus:ring-2 focus:ring-[#2E7D32]/20';
+
   return (
-    <div className="tab-content">
-      <h2>Catalog & Stock Control</h2>
+    <div className="p-6 space-y-6 min-h-screen bg-[#F5F5F5] text-[#333333] font-sans antialiased selection:bg-[#2E7D32]/15 selection:text-[#2E7D32]">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold tracking-tight text-[#333333]">
+          Catalog & Stock Control
+        </h2>
+      </div>
 
       {readOnly && (
-        <p className="read-only-note">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-800">
           View only. Adding products and restocking are done by an admin.
-        </p>
+        </div>
       )}
 
       {!readOnly && (
-        <>
+        <div className="space-y-6">
+          {/* Edit Product Form */}
           {editingProduct && editForm && (
-            <form ref={editFormRef} className="form-card" onSubmit={handleUpdateProduct} autoComplete="off">
-              <h3>Edit {editingProduct.name}</h3>
-              <div className="form-grid">
+            <form
+              ref={editFormRef}
+              className="rounded-2xl border border-[#2E7D32]/30 bg-[#FFFFFF] p-5 shadow-xs space-y-4"
+              onSubmit={handleUpdateProduct}
+              autoComplete="off"
+            >
+              <h3 className="text-base font-bold text-[#333333] border-b border-gray-100 pb-2">
+                Edit {editingProduct.name}
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <input
                   placeholder="SKU"
                   value={editForm.sku}
                   onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })}
+                  className={inputStyle}
                   required
                 />
                 <input
                   placeholder="Product Name"
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  className={inputStyle}
                   required
                 />
                 <input
                   placeholder="Category"
                   value={editForm.category}
                   onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                  className={inputStyle}
                   required
                 />
                 <input
@@ -249,6 +282,7 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
                   step="0.01"
                   value={editForm.price}
                   onChange={(e) => setEditForm({ ...editForm, price: Number(e.target.value) })}
+                  className={inputStyle}
                   required
                 />
                 <input
@@ -259,6 +293,7 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
                   step="0.01"
                   value={editForm.cost}
                   onChange={(e) => setEditForm({ ...editForm, cost: Number(e.target.value) })}
+                  className={inputStyle}
                   required
                 />
                 <input
@@ -269,215 +304,399 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
                   step="1"
                   value={editForm.reorder_level}
                   onChange={(e) => setEditForm({ ...editForm, reorder_level: Number(e.target.value) })}
+                  className={inputStyle}
                   required
                 />
               </div>
-              <div className="inventory-toolbar">
-                <button type="submit" className="btn-primary" disabled={savingEdit}>
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="rounded-lg bg-[#2E7D32] px-4 py-2 text-xs font-semibold text-[#FFFFFF] shadow-xs hover:bg-[#246628] transition-colors disabled:opacity-50"
+                  disabled={savingEdit}
+                >
                   {savingEdit ? 'Saving…' : 'Save Changes'}
                 </button>
-                <button type="button" className="btn-secondary" onClick={cancelEditing} disabled={savingEdit}>
+                <button
+                  type="button"
+                  className="rounded-lg border border-gray-300 bg-[#FFFFFF] px-4 py-2 text-xs font-semibold text-[#333333] hover:bg-gray-50 transition-colors shadow-2xs disabled:opacity-50"
+                  onClick={cancelEditing}
+                  disabled={savingEdit}
+                >
                   Cancel
                 </button>
               </div>
             </form>
           )}
 
-          {/* autoComplete="off" on both forms: no browser pop-up of values
-              typed into these boxes before. */}
-          <form className="form-card" onSubmit={handleSubmit} autoComplete="off">
-            <h3>Add New Product</h3>
-            <div className="form-grid">
-              <input placeholder="SKU" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} required />
-              <input placeholder="Product Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              <input placeholder="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} required />
-              <input placeholder="Price (₱)" type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
-              <input placeholder="Cost (₱)" type="number" step="0.01" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} required />
-              <input placeholder="Stock Quantity" type="number" value={form.stock_quantity} onChange={(e) => setForm({ ...form, stock_quantity: e.target.value })} required />
-              <input placeholder="Reorder Level" type="number" value={form.reorder_level} onChange={(e) => setForm({ ...form, reorder_level: e.target.value })} required />
-            </div>
-            <button type="submit" className="btn-primary">Save Product</button>
-          </form>
+          {/* Grid of Action Forms */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Add New Product */}
+            <form
+              className="rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-5 shadow-xs space-y-4 flex flex-col justify-between"
+              onSubmit={handleSubmit}
+              autoComplete="off"
+            >
+              <div className="space-y-4">
+                <h3 className="text-base font-bold text-[#333333] border-b border-gray-100 pb-2">
+                  Add New Product
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+                  <input
+                    placeholder="SKU"
+                    value={form.sku}
+                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                    className={inputStyle}
+                    required
+                  />
+                  <input
+                    placeholder="Product Name"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    className={inputStyle}
+                    required
+                  />
+                  <input
+                    placeholder="Category"
+                    value={form.category}
+                    onChange={(e) => setForm({ ...form, category: e.target.value })}
+                    className={inputStyle}
+                    required
+                  />
+                  <input
+                    placeholder="Price (₱)"
+                    type="number"
+                    step="0.01"
+                    value={form.price}
+                    onChange={(e) => setForm({ ...form, price: e.target.value })}
+                    className={inputStyle}
+                    required
+                  />
+                  <input
+                    placeholder="Cost (₱)"
+                    type="number"
+                    step="0.01"
+                    value={form.cost}
+                    onChange={(e) => setForm({ ...form, cost: e.target.value })}
+                    className={inputStyle}
+                    required
+                  />
+                  <input
+                    placeholder="Stock Quantity"
+                    type="number"
+                    value={form.stock_quantity}
+                    onChange={(e) => setForm({ ...form, stock_quantity: e.target.value })}
+                    className={inputStyle}
+                    required
+                  />
+                  <input
+                    placeholder="Reorder Level"
+                    type="number"
+                    value={form.reorder_level}
+                    onChange={(e) => setForm({ ...form, reorder_level: e.target.value })}
+                    className={inputStyle}
+                    required
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="w-full rounded-lg bg-[#2E7D32] py-2.5 text-xs font-semibold text-[#FFFFFF] shadow-xs hover:bg-[#246628] transition-colors mt-4"
+              >
+                Save Product
+              </button>
+            </form>
 
-          <form className="form-card" onSubmit={handleReceive} autoComplete="off">
-            <h3>Receive Stock by Batch</h3>
-            <div className="form-grid">
-              <select value={receiveForm.product_id} onChange={(e) => setReceiveForm({ ...receiveForm, product_id: e.target.value })} required>
-                <option value="">Select product</option>
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>{product.name}</option>
-                ))}
-              </select>
-              <input type="number" min="1" placeholder="Batch quantity" value={receiveForm.quantity} onChange={(e) => setReceiveForm({ ...receiveForm, quantity: e.target.value })} required />
-              <input type="date" value={receiveForm.expiry_date} onChange={(e) => setReceiveForm({ ...receiveForm, expiry_date: e.target.value })} required />
-            </div>
-            <button type="submit" className="btn-primary">Receive Stock</button>
-          </form>
+            {/* Receive Stock */}
+            <form
+              className="rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-5 shadow-xs space-y-4 flex flex-col justify-between"
+              onSubmit={handleReceive}
+              autoComplete="off"
+            >
+              <div className="space-y-4">
+                <h3 className="text-base font-bold text-[#333333] border-b border-gray-100 pb-2">
+                  Receive Stock by Batch
+                </h3>
+                <div className="space-y-3">
+                  <select
+                    value={receiveForm.product_id}
+                    onChange={(e) => setReceiveForm({ ...receiveForm, product_id: e.target.value })}
+                    className={inputStyle}
+                    required
+                  >
+                    <option value="">Select product</option>
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Batch quantity"
+                    value={receiveForm.quantity}
+                    onChange={(e) => setReceiveForm({ ...receiveForm, quantity: e.target.value })}
+                    className={inputStyle}
+                    required
+                  />
+                  <input
+                    type="date"
+                    value={receiveForm.expiry_date}
+                    onChange={(e) => setReceiveForm({ ...receiveForm, expiry_date: e.target.value })}
+                    className={inputStyle}
+                    required
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="w-full rounded-lg bg-[#2E7D32] py-2.5 text-xs font-semibold text-[#FFFFFF] shadow-xs hover:bg-[#246628] transition-colors mt-4"
+              >
+                Receive Stock
+              </button>
+            </form>
 
-          <form className="form-card" onSubmit={handleWriteOff} autoComplete="off">
-            <h3>Write Off Damaged / Spoiled Stock</h3>
-            <div className="form-grid">
-              <select
-                aria-label="Product"
-                value={writeOffForm.product_id}
-                onChange={(e) => setWriteOffForm({ ...writeOffForm, product_id: e.target.value, batch_id: '' })}
-                required
+            {/* Write Off Stock */}
+            <form
+              className="rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-5 shadow-xs space-y-4 flex flex-col justify-between"
+              onSubmit={handleWriteOff}
+              autoComplete="off"
+            >
+              <div className="space-y-4">
+                <h3 className="text-base font-bold text-[#333333] border-b border-gray-100 pb-2">
+                  Write Off Damaged / Spoiled Stock
+                </h3>
+                <div className="space-y-3">
+                  <select
+                    aria-label="Product"
+                    value={writeOffForm.product_id}
+                    onChange={(e) =>
+                      setWriteOffForm({ ...writeOffForm, product_id: e.target.value, batch_id: '' })
+                    }
+                    className={inputStyle}
+                    required
+                  >
+                    <option value="">Select product</option>
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    aria-label="Batch"
+                    value={writeOffForm.batch_id}
+                    onChange={(e) => setWriteOffForm({ ...writeOffForm, batch_id: e.target.value })}
+                    disabled={!writeOffForm.product_id}
+                    className={`${inputStyle} disabled:bg-gray-100 disabled:cursor-not-allowed`}
+                    required
+                  >
+                    <option value="">Select active batch</option>
+                    {writeOffBatchChoices.map((batch) => (
+                      <option key={batch.id} value={batch.id}>
+                        {batch.batch_code} — {batch.quantity_remaining} remaining
+                      </option>
+                    ))}
+                  </select>
+
+                  <input
+                    aria-label="Write-off quantity"
+                    type="number"
+                    min="1"
+                    max={
+                      writeOffBatchChoices.find((batch) => batch.id === Number(writeOffForm.batch_id))
+                        ?.quantity_remaining
+                    }
+                    step="1"
+                    placeholder="Quantity"
+                    value={writeOffForm.quantity}
+                    onChange={(e) => setWriteOffForm({ ...writeOffForm, quantity: e.target.value })}
+                    className={inputStyle}
+                    required
+                  />
+
+                  <select
+                    aria-label="Write-off type"
+                    value={writeOffForm.kind}
+                    onChange={(e) =>
+                      setWriteOffForm({ ...writeOffForm, kind: e.target.value as WriteOffStockInput['kind'] })
+                    }
+                    className={inputStyle}
+                    required
+                  >
+                    <option value="damaged">Damaged</option>
+                    <option value="spoiled">Spoiled</option>
+                  </select>
+
+                  <input
+                    aria-label="Reason"
+                    placeholder="Reason"
+                    value={writeOffForm.reason}
+                    onChange={(e) => setWriteOffForm({ ...writeOffForm, reason: e.target.value })}
+                    className={inputStyle}
+                    required
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="w-full rounded-lg bg-red-600 py-2.5 text-xs font-semibold text-[#FFFFFF] shadow-xs hover:bg-red-700 transition-colors mt-4"
               >
-                <option value="">Select product</option>
-                {products.map((product) => (
-                  <option key={product.id} value={product.id}>{product.name}</option>
-                ))}
-              </select>
-              <select
-                aria-label="Batch"
-                value={writeOffForm.batch_id}
-                onChange={(e) => setWriteOffForm({ ...writeOffForm, batch_id: e.target.value })}
-                disabled={!writeOffForm.product_id}
-                required
-              >
-                <option value="">Select active batch</option>
-                {writeOffBatchChoices.map((batch) => (
-                  <option key={batch.id} value={batch.id}>
-                    {batch.batch_code} — {batch.quantity_remaining} remaining
-                  </option>
-                ))}
-              </select>
-              <input
-                aria-label="Write-off quantity"
-                type="number"
-                min="1"
-                max={writeOffBatchChoices.find((batch) => batch.id === Number(writeOffForm.batch_id))?.quantity_remaining}
-                step="1"
-                placeholder="Quantity"
-                value={writeOffForm.quantity}
-                onChange={(e) => setWriteOffForm({ ...writeOffForm, quantity: e.target.value })}
-                required
-              />
-              <select
-                aria-label="Write-off type"
-                value={writeOffForm.kind}
-                onChange={(e) => setWriteOffForm({ ...writeOffForm, kind: e.target.value as WriteOffStockInput['kind'] })}
-                required
-              >
-                <option value="damaged">Damaged</option>
-                <option value="spoiled">Spoiled</option>
-              </select>
-              <input
-                aria-label="Reason"
-                placeholder="Reason"
-                value={writeOffForm.reason}
-                onChange={(e) => setWriteOffForm({ ...writeOffForm, reason: e.target.value })}
-                required
-              />
-            </div>
-            <button type="submit" className="btn-danger">Write Off Stock</button>
-          </form>
-        </>
+                Write Off Stock
+              </button>
+            </form>
+          </div>
+        </div>
       )}
 
-      <div className="inventory-toolbar">
+      {/* Toolbar */}
+      <div className="flex items-center gap-3 pt-2">
         {!readOnly && (
-          <button className="btn-primary" onClick={handleProcessExpired} disabled={processingExpired}>
+          <button
+            className="rounded-lg bg-[#2E7D32] px-4 py-2 text-xs font-semibold text-[#FFFFFF] shadow-xs hover:bg-[#246628] disabled:opacity-50 transition-colors"
+            onClick={handleProcessExpired}
+            disabled={processingExpired}
+          >
             {processingExpired ? 'Processing…' : 'Process expired stock'}
           </button>
         )}
-        {onRefresh && <button className="btn-secondary" onClick={onRefresh}>Refresh</button>}
+        {onRefresh && (
+          <button
+            className="rounded-lg border border-gray-300 bg-[#FFFFFF] px-4 py-2 text-xs font-semibold text-[#333333] hover:bg-gray-50 transition-colors shadow-2xs"
+            onClick={onRefresh}
+          >
+            Refresh
+          </button>
+        )}
       </div>
 
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>SKU / Barcode</th>
-            <th>Name</th>
-            <th>Category</th>
-            <th>Price</th>
-            <th>Stock Level</th>
-            <th>Expiry</th>
-            <th>Status</th>
-            {!readOnly && <th>Actions</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {products.map((p) => {
-            const summary = inventoryMap[p.id] ?? {
-              available_quantity: p.stock_quantity,
-              expired_quantity: 0,
-              near_expiry_count: 0,
-              earliest_expiry_date: null,
-              expires_soon: false,
-              has_expired_batches: false,
-            };
-            const isOutOfStock = summary.available_quantity === 0;
-            const isLow = !isOutOfStock && summary.available_quantity <= p.reorder_level;
-            const isExpiring = summary.near_expiry_count > 0 || summary.expires_soon;
-            return (
-              <tr
-                key={p.id}
-                className={[
-                  isOutOfStock ? 'out-of-stock-row' : '',
-                  isLow || isExpiring ? 'low-stock-row' : '',
-                ].filter(Boolean).join(' ')}
-              >
-                <td>
-                  {p.sku}
-                  {/* The barcode as real bars (number underneath), ready to scan or print. */}
-                  <div className="inventory-barcode">
-                    <BarcodeImage value={p.barcode} height={30} barWidth={1} fontSize={11} />
-                  </div>
-                </td>
-                <td><strong>{p.name}</strong></td>
-                <td>{p.category}</td>
-                <td>₱{p.price.toFixed(2)}</td>
-                <td>
-                  {summary.available_quantity}
-                  {/* How that total splits across batches, e.g. 13 = B-3: 10 + B-1: 3. */}
-                  <BatchBreakdown
-                    batches={sellableBatches(batches.filter((batch) => batch.product_id === p.id))}
-                  />
-                </td>
-                <td>
-                  {formatExpiry(summary.earliest_expiry_date)}
-                  {summary.near_expiry_count > 0 && (
-                    <div className="expiry-note">
-                      {summary.near_expiry_count} of {summary.available_quantity} stocks nearing expiry
-                      {` · ${NEAR_EXPIRY_PERCENT_OFF}% off at checkout`}
-                    </div>
-                  )}
-                  <details className="batch-details">
-                    <summary>Batch details</summary>
-                    <ul>
-                      {batches.filter((batch) => batch.product_id === p.id).map((batch) => (
-                        <li key={batch.id}>
-                          {batch.batch_code}: {batch.quantity_remaining}/{batch.quantity_received}
-                          {' · '}{formatExpiry(batch.expiry_date)}
-                          {' · '}{batch.status}
-                        </li>
-                      ))}
-                      {!batches.some((batch) => batch.product_id === p.id) && <li>No batches recorded</li>}
-                    </ul>
-                  </details>
-                </td>
-                <td>
-                  {isOutOfStock && <span className="badge badge-no-stock">No Stock</span>}
-                  {isLow && (
-                    <span className="badge badge-low-stock">
-                      <span className="stock-warning-icon" aria-hidden="true">⚠︎</span>
-                      {' '}Low Stock
-                    </span>
-                  )}
-                  {isExpiring && <span className="badge badge-warn">⏳ Expires soon</span>}
-                  {!isOutOfStock && !isLow && !isExpiring && <span className="badge badge-ok">OK</span>}
-                </td>
-                {!readOnly && (
-                  <td>
-                    <button className="btn-sm" onClick={() => startEditing(p)}>Edit</button>
-                  </td>
-                )}
+      {/* Inventory Data Table */}
+      <div className="overflow-hidden rounded-2xl border border-gray-200/80 bg-[#FFFFFF] shadow-xs">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-[#333333]">
+            <thead className="bg-[#F5F5F5] border-b border-gray-200 text-[#333333]/70 font-semibold">
+              <tr>
+                <th className="px-4 py-3">SKU / Barcode</th>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Category</th>
+                <th className="px-4 py-3">Price</th>
+                <th className="px-4 py-3">Stock Level</th>
+                <th className="px-4 py-3">Expiry</th>
+                <th className="px-4 py-3">Status</th>
+                {!readOnly && <th className="px-4 py-3 text-right">Actions</th>}
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {products.map((p) => {
+                const summary = inventoryMap[p.id] ?? {
+                  available_quantity: p.stock_quantity,
+                  expired_quantity: 0,
+                  near_expiry_count: 0,
+                  earliest_expiry_date: null,
+                  expires_soon: false,
+                  has_expired_batches: false,
+                };
+                const isOutOfStock = summary.available_quantity === 0;
+                const isLow = !isOutOfStock && summary.available_quantity <= p.reorder_level;
+                const isExpiring = summary.near_expiry_count > 0 || summary.expires_soon;
+
+                return (
+                  <tr
+                    key={p.id}
+                    className={`transition-colors ${
+                      isOutOfStock
+                        ? 'bg-red-50/40 hover:bg-red-50/70'
+                        : isLow || isExpiring
+                        ? 'bg-amber-50/40 hover:bg-amber-50/70'
+                        : 'hover:bg-gray-50/60'
+                    }`}
+                  >
+                    <td className="px-4 py-3 font-mono text-[11px] text-[#333333]/70 space-y-1">
+                      <div>{p.sku}</div>
+                      <div className="mt-1">
+                        <BarcodeImage value={p.barcode} height={30} barWidth={1} fontSize={11} />
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-[#333333]">{p.name}</td>
+                    <td className="px-4 py-3 text-[#333333]/70">{p.category}</td>
+                    <td className="px-4 py-3 font-medium">₱{p.price.toFixed(2)}</td>
+                    <td className="px-4 py-3 font-bold space-y-1">
+                      <div>{summary.available_quantity}</div>
+                      <BatchBreakdown
+                        batches={sellableBatches(batches.filter((batch) => batch.product_id === p.id))}
+                      />
+                    </td>
+                    <td className="px-4 py-3 space-y-1">
+                      <div>{formatExpiry(summary.earliest_expiry_date)}</div>
+                      {summary.near_expiry_count > 0 && (
+                        <div className="text-[10px] font-semibold text-amber-700">
+                          {summary.near_expiry_count} of {summary.available_quantity} stocks nearing expiry
+                          {` · ${NEAR_EXPIRY_PERCENT_OFF}% off at checkout`}
+                        </div>
+                      )}
+                      <details className="cursor-pointer text-[11px] text-[#2E7D32] hover:underline">
+                        <summary className="font-medium outline-none">Batch details</summary>
+                        <ul className="mt-1 space-y-1 pl-2 text-[10px] text-[#333333]/80 border-l border-gray-200">
+                          {batches
+                            .filter((batch) => batch.product_id === p.id)
+                            .map((batch) => (
+                              <li key={batch.id}>
+                                <span className="font-mono font-semibold">{batch.batch_code}</span>:{' '}
+                                {batch.quantity_remaining}/{batch.quantity_received}
+                                {' · '}
+                                {formatExpiry(batch.expiry_date)}
+                                {' · '}
+                                <span className="capitalize">{batch.status}</span>
+                              </li>
+                            ))}
+                          {!batches.some((batch) => batch.product_id === p.id) && (
+                            <li className="text-gray-400">No batches recorded</li>
+                          )}
+                        </ul>
+                      </details>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {isOutOfStock && (
+                          <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-bold text-red-700 border border-red-200">
+                            No Stock
+                          </span>
+                        )}
+                        {isLow && (
+                          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200 inline-flex items-center gap-1">
+                            <span>⚠︎</span> Low Stock
+                          </span>
+                        )}
+                        {isExpiring && (
+                          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200">
+                            ⏳ Expires soon
+                          </span>
+                        )}
+                        {!isOutOfStock && !isLow && !isExpiring && (
+                          <span className="rounded-full bg-[#2E7D32]/10 px-2.5 py-0.5 text-[10px] font-bold text-[#2E7D32] border border-[#2E7D32]/20">
+                            OK
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    {!readOnly && (
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          className="rounded-lg border border-gray-300 bg-[#FFFFFF] px-2.5 py-1 text-xs font-semibold text-[#333333] hover:bg-gray-50 transition-colors shadow-2xs"
+                          onClick={() => startEditing(p)}
+                        >
+                          Edit
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
