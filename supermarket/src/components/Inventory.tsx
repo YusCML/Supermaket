@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import type { NewProductInput, Product, ProductBatch, ProductInventorySummary, ReceiveStockInput } from '../types/app';
+import type { NewProductInput, Product, ProductBatch, ProductInventorySummary, ReceiveStockInput, UpdateProductInput } from '../types/app';
 import { useNotify } from '../contexts/NotifyContext';
 import { formatExpiry, sellableBatches } from '../lib/expiry';
 import { NEAR_EXPIRY_PERCENT_OFF } from '../lib/pricing';
@@ -18,6 +18,7 @@ interface InventoryProps {
   // They return what the database generated: the saved product (with its
   // barcode) and the new batch code.
   onAddProduct?: (product: NewProductInput) => Promise<Product>;
+  onUpdateProduct?: (productId: number, product: UpdateProductInput) => Promise<void>;
   onReceiveStock?: (input: ReceiveStockInput) => Promise<string>;
   onProcessExpired?: () => Promise<void>;
   onRefresh?: () => void;
@@ -41,9 +42,12 @@ const emptyReceive = {
   expiry_date: '',
 };
 
-export default function Inventory({ products, inventory, batches, readOnly = false, onAddProduct, onReceiveStock, onProcessExpired, onRefresh }: InventoryProps) {
+export default function Inventory({ products, inventory, batches, readOnly = false, onAddProduct, onUpdateProduct, onReceiveStock, onProcessExpired, onRefresh }: InventoryProps) {
   const [form, setForm] = useState(emptyForm);
   const [receiveForm, setReceiveForm] = useState(emptyReceive);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editForm, setEditForm] = useState<UpdateProductInput | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [processingExpired, setProcessingExpired] = useState(false);
   const { notify } = useNotify();
 
@@ -91,6 +95,39 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
     }
   };
 
+  const startEditing = (product: Product) => {
+    setEditingProduct(product);
+    setEditForm({
+      sku: product.sku,
+      name: product.name,
+      category: product.category,
+      price: product.price,
+      cost: product.cost,
+      reorder_level: product.reorder_level,
+    });
+  };
+
+  const cancelEditing = () => {
+    setEditingProduct(null);
+    setEditForm(null);
+  };
+
+  const handleUpdateProduct = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct || !editForm || !onUpdateProduct || savingEdit) return;
+
+    setSavingEdit(true);
+    try {
+      await onUpdateProduct(editingProduct.id, editForm);
+      notify(`${editForm.name} was updated.`, 'success');
+      cancelEditing();
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Could not update the product.', 'error');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const handleProcessExpired = async () => {
     if (processingExpired) return;
     setProcessingExpired(true);
@@ -116,6 +153,70 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
 
       {!readOnly && (
         <>
+          {editingProduct && editForm && (
+            <form className="form-card" onSubmit={handleUpdateProduct} autoComplete="off">
+              <h3>Edit {editingProduct.name}</h3>
+              <div className="form-grid">
+                <input
+                  placeholder="SKU"
+                  value={editForm.sku}
+                  onChange={(e) => setEditForm({ ...editForm, sku: e.target.value })}
+                  required
+                />
+                <input
+                  placeholder="Product Name"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  required
+                />
+                <input
+                  placeholder="Category"
+                  value={editForm.category}
+                  onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
+                  required
+                />
+                <input
+                  aria-label="Price"
+                  placeholder="Price (₱)"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editForm.price}
+                  onChange={(e) => setEditForm({ ...editForm, price: Number(e.target.value) })}
+                  required
+                />
+                <input
+                  aria-label="Cost"
+                  placeholder="Cost (₱)"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editForm.cost}
+                  onChange={(e) => setEditForm({ ...editForm, cost: Number(e.target.value) })}
+                  required
+                />
+                <input
+                  aria-label="Reorder level"
+                  placeholder="Reorder Level"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={editForm.reorder_level}
+                  onChange={(e) => setEditForm({ ...editForm, reorder_level: Number(e.target.value) })}
+                  required
+                />
+              </div>
+              <div className="inventory-toolbar">
+                <button type="submit" className="btn-primary" disabled={savingEdit}>
+                  {savingEdit ? 'Saving…' : 'Save Changes'}
+                </button>
+                <button type="button" className="btn-secondary" onClick={cancelEditing} disabled={savingEdit}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+
           {/* autoComplete="off" on both forms: no browser pop-up of values
               typed into these boxes before. */}
           <form className="form-card" onSubmit={handleSubmit} autoComplete="off">
@@ -168,6 +269,7 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
             <th>Stock Level</th>
             <th>Expiry</th>
             <th>Status</th>
+            {!readOnly && <th>Actions</th>}
           </tr>
         </thead>
         <tbody>
@@ -241,6 +343,11 @@ export default function Inventory({ products, inventory, batches, readOnly = fal
                   {isExpiring && <span className="badge badge-warn">⏳ Expires soon</span>}
                   {!isOutOfStock && !isLow && !isExpiring && <span className="badge badge-ok">OK</span>}
                 </td>
+                {!readOnly && (
+                  <td>
+                    <button className="btn-sm" onClick={() => startEditing(p)}>Edit</button>
+                  </td>
+                )}
               </tr>
             );
           })}

@@ -10,6 +10,7 @@ import type {
   ProductInventorySummary,
   ReceiveStockInput,
   SalesAnalytics,
+  UpdateProductInput,
 } from '../types/app';
 
 // Every call the app makes to the database lives here.
@@ -194,6 +195,34 @@ export const api = {
       throw error;
     }
     return (data?.[0] ?? null) as Product;
+  },
+
+  // Admin only. Barcode and stock quantity deliberately aren't editable here:
+  // barcodes are permanent and stock belongs to the batch receiving workflow.
+  async updateProduct(productId: number, product: UpdateProductInput): Promise<Product> {
+    const { data, error } = await supabase
+      .from('products')
+      .update({
+        ...product,
+        sku: product.sku.trim(),
+        name: product.name.trim(),
+        category: product.category.trim(),
+      })
+      .eq('id', productId)
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === '23505') {
+        throw new Error('A product with that SKU already exists.');
+      }
+      if (error.code === '42501') {
+        throw new Error('Only admins can edit products.');
+      }
+      throw error;
+    }
+
+    return data as Product;
   },
 
   // Saves a sale. We only send WHAT is being bought, WHO the member is and how

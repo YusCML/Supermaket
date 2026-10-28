@@ -14,6 +14,7 @@ import type {
   NewProductInput,
   ReceiveStockInput,
   SalesAnalytics,
+  UpdateProductInput,
 } from '../types/app';
 import '../App.css';
 
@@ -151,6 +152,11 @@ export default function AdminPage() {
     return batchCode;
   };
 
+  const handleUpdateProduct = async (productId: number, product: UpdateProductInput) => {
+    await api.updateProduct(productId, product);
+    await loadData();
+  };
+
   const handleProcessExpired = async () => {
     await api.processExpiredBatches();
     await loadData();
@@ -193,6 +199,7 @@ export default function AdminPage() {
                 inventory={inventory}
                 batches={batches}
                 onAddProduct={handleAddProduct}
+                onUpdateProduct={handleUpdateProduct}
                 onReceiveStock={handleReceiveStock}
                 onProcessExpired={handleProcessExpired}
                 onRefresh={loadData}

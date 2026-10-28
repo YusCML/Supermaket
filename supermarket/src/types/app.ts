@@ -138,4 +138,13 @@ export interface NewProductInput {
   reorder_level: number;
 }
 
-// merged above 
+export interface UpdateProductInput {
+  sku: string;
+  name: string;
+  category: string;
+  price: number;
+  cost: number;
+  reorder_level: number;
+}
+
+// merged above
