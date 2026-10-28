@@ -13,7 +13,7 @@ export default function RolePickerPage() {
   // see only "Customer" (or be sent straight to self-serve).
   if (roleLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-400">
+      <div className="flex min-h-screen items-center justify-center bg-[#F5F5F5] font-sans text-xs font-semibold text-[#333333]/60 antialiased">
         Checking your access…
       </div>
     );
@@ -25,31 +25,48 @@ export default function RolePickerPage() {
   }
 
   return (
-    <div className="login-page">
-      <div className="login-card">
-        <h1>⚡ SuperMarket Express</h1>
-        <p className="login-subtitle">
-          Signed in as <strong>{user?.email}</strong>.<br />
-          How would you like to continue?
-        </p>
+    <div className="flex min-h-screen items-center justify-center bg-[#F5F5F5] px-4 py-12 font-sans antialiased selection:bg-[#2E7D32]/15 selection:text-[#2E7D32]">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-8 shadow-xs">
+        {/* Header */}
+        <div className="text-center">
+          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#2E7D32]/10 text-xl text-[#2E7D32]">
+            ⚡
+          </div>
+          <h1 className="mt-3 text-2xl font-bold tracking-tight text-[#333333]">
+            SuperMarket Express
+          </h1>
+          <p className="mt-2 text-xs leading-relaxed text-[#333333]/70">
+            Signed in as <strong className="font-semibold text-[#333333]">{user?.email}</strong>.<br />
+            How would you like to continue?
+          </p>
+        </div>
 
-        <div className="role-options">
+        {/* Role Options */}
+        <div className="mt-6 space-y-3">
           {availableRoles.map((role) => (
             <button
               key={role}
               type="button"
-              className="role-option"
+              className="group flex w-full flex-col text-left rounded-xl border border-gray-200 bg-[#FFFFFF] p-4 shadow-2xs hover:border-[#2E7D32]/50 hover:bg-[#2E7D32]/5 transition-all cursor-pointer"
               onClick={() => navigate(ROLE_INFO[role].home)}
             >
-              <span className="role-option-title">
-                {ROLE_INFO[role].icon} {ROLE_INFO[role].label}
+              <span className="flex items-center gap-2 text-sm font-bold text-[#333333] group-hover:text-[#2E7D32] transition-colors">
+                <span>{ROLE_INFO[role].icon}</span>
+                <span>{ROLE_INFO[role].label}</span>
               </span>
-              <span className="role-option-text">{ROLE_INFO[role].description}</span>
+              <span className="mt-1 text-xs text-[#333333]/60 leading-normal">
+                {ROLE_INFO[role].description}
+              </span>
             </button>
           ))}
         </div>
 
-        <button type="button" className="role-signout" onClick={signOut}>
+        {/* Sign Out Button */}
+        <button
+          type="button"
+          className="mt-6 w-full rounded-xl border border-gray-300 bg-[#FFFFFF] py-2.5 text-xs font-semibold text-[#333333] shadow-2xs hover:bg-[#F5F5F5] transition-colors"
+          onClick={signOut}
+        >
           Sign out
         </button>
       </div>
