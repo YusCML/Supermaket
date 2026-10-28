@@ -9,6 +9,7 @@ import type {
   Product,
   ProductBatch,
   ProductInventorySummary,
+  CheckoutReceipt,
 } from '../types/app';
 
 // Loads the store data a page needs and keeps it in one place, so the
@@ -33,9 +34,9 @@ export function useStoreData(role: AppRole) {
 
   // Pull fresh products, members, batches, and inventory summaries after sales
   // and stock changes so the POS and Inventory screens stay current.
-  const loadData = async () => {
+  const loadData = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const [prodData, custData, logData, inventoryData, batchData] = await Promise.all([
         api.getProducts(),
         api.getCustomers(),
@@ -54,7 +55,7 @@ export function useStoreData(role: AppRole) {
     } catch (err) {
       console.error('Error loading Supabase data:', err);
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -66,9 +67,10 @@ export function useStoreData(role: AppRole) {
 
   // Every role can check out (customers only for themselves; the database
   // makes sure of that). Reload afterwards so stock and points are current.
-  const handleCheckout = async (payload: CheckoutPayload) => {
-    await api.processCheckout(payload);
-    await loadData();
+  const handleCheckout = async (payload: CheckoutPayload): Promise<CheckoutReceipt> => {
+    const receipt = await api.processCheckout(payload);
+    await loadData(false);
+    return receipt;
   };
 
   // The POS wants stock that excludes expired batches, which is what the
