@@ -10,9 +10,10 @@ const SELF_SERVE_TABS: NavTab<'checkout'>[] = [
 
 // The customer interface (/self-serve). Everyone can open it, since every
 // account is a loyalty customer. You scan your own items and the sale goes
-// on your own account, so you earn (and can spend) your own points.
+// on your own account, so you earn (and can spend) your own points. Like the
+// till, you can pick which batch of a product you're buying.
 export default function SelfServePage() {
-  const { customers, loading, handleCheckout, posProducts } = useStoreData('customer');
+  const { customers, batches, loading, handleCheckout, posProducts } = useStoreData('customer');
 
   return (
     <div className="app-container">
@@ -31,6 +32,7 @@ export default function SelfServePage() {
             mode="self-serve"
             products={posProducts}
             customers={customers}
+            batches={batches}
             onCheckout={handleCheckout}
           />
         )}

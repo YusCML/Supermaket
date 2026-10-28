@@ -49,6 +49,7 @@ export default function CashierPage() {
                 mode="staff"
                 products={posProducts}
                 customers={customers}
+                batches={batches}
                 onCheckout={handleCheckout}
               />
             )}

@@ -1,19 +1,31 @@
-import { useRef, useState } from 'react';
-import type { ProductInventorySummary, Customer, CartItem, CheckoutPayload } from '../types/app';
+import { useRef, useState, type KeyboardEvent } from 'react';
+import type { ProductInventorySummary, ProductBatch, Customer, CartItem, CheckoutPayload } from '../types/app';
 import { discountForPoints, maxRedeemablePoints, roundToCentavos } from '../lib/loyalty';
+import { markedDownPrice, NEAR_EXPIRY_PERCENT_OFF, priceLine } from '../lib/pricing';
+import { formatExpiry, isNearExpiry, sellableBatches } from '../lib/expiry';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotify } from '../contexts/NotifyContext';
+import ProductDetails from './ProductDetails';
+import BatchBreakdown from './BatchBreakdown';
 
 interface POSProps {
   products: ProductInventorySummary[];
   customers: Customer[];
+  // Stock batches: picked from in the product details window, and shown as
+  // per-batch counts on the product cards. Everyone gets them (till and self-serve).
+  batches?: ProductBatch[];
   onCheckout: (payload: CheckoutPayload) => Promise<void>;
   // 'self-serve': a customer buying for themselves. The sale always goes on
   //   their own loyalty account, so there's no member lookup at all.
   // 'staff': a cashier or admin at the till. They look the customer up by
-  //   loyalty ID / phone / email, or leave the box empty for a walk-in.
+  //   name / loyalty ID / phone / email. A member is required to check out.
   mode?: 'self-serve' | 'staff';
 }
 
+// Does this member match what was typed in the member box? Phone number,
+// loyalty ID (e.g. LOY-000012), email or account ID all work. New customers
+// often haven't added a phone number, so the loyalty ID or email is usually
+// the way to find them.
 function matchesMember(c: Customer, query: string): boolean {
   const lowered = query.toLowerCase();
   return (
@@ -24,14 +36,28 @@ function matchesMember(c: Customer, query: string): boolean {
   );
 }
 
-export default function POS({ products = [], customers = [], onCheckout, mode = 'staff' }: POSProps) {
+// Does the member contain what's been typed so far? Used for the suggestion
+// list under the member box, so partial text is enough: part of a name,
+// email, phone number or loyalty ID.
+function memberContains(c: Customer, query: string): boolean {
+  const lowered = query.toLowerCase();
+  return [c.name, c.email, c.phone, c.loyalty_id].some((field) =>
+    (field || '').toLowerCase().includes(lowered)
+  );
+}
+
+// How many suggestions to show under the member box at once.
+const MAX_MEMBER_SUGGESTIONS = 6;
+
+export default function POS({ products = [], customers = [], batches = [], onCheckout, mode = 'staff' }: POSProps) {
   const { user } = useAuth();
+  const { notify } = useNotify();
   const isSelfServe = mode === 'self-serve';
 
   // Who the sale goes on when the screen opens (and again after each sale).
   // At self-serve that's always you: everyone who logs in is a loyalty member.
   // At the till it starts empty: the cashier is serving someone else, so they
-  // look that customer up. Left empty, it's a walk-in (no member, no points).
+  // look that customer up. Checkout stays blocked until a member is picked.
   const me = customers.find((c) => c.id === user?.id) ?? null;
   const startingMember = isSelfServe ? me : null;
 
@@ -41,7 +67,15 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(startingMember);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'Loyalty Points'>('Cash');
+  // The member suggestion list: whether it's open, and which row the arrow
+  // keys have highlighted (-1 = none).
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [highlighted, setHighlighted] = useState(-1);
+  // The product whose details window is open (null = closed).
+  const [detailsProductId, setDetailsProductId] = useState<number | null>(null);
 
+  // Stops a double-click on "Complete Transaction" from saving the sale twice.
+  // A ref (not state) because it has to flip instantly, before React re-renders.
   const isSubmitting = useRef(false);
 
   const filteredProducts = products.filter((p) => {
@@ -54,27 +88,137 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
     );
   });
 
-  const addToCart = (product: ProductInventorySummary) => {
-    const alreadyInCart = cart.find((item) => item.id === product.id)?.quantity ?? 0;
+  // --- Basket lines and batches -------------------------------------------------
+  // A basket line is one product from one batch, so the same milk can be on
+  // two lines (e.g. 2 from batch B-1 and 1 from B-3). Only if a product's
+  // batches aren't known (none loaded) is a line just the product, and the
+  // database takes the soonest-expiring stock.
+  const lineKey = (item: Pick<CartItem, 'id' | 'batch_id'>) => `${item.id}:${item.batch_id ?? 'any'}`;
 
-    if (product.stock_quantity <= 0) return alert('Item is out of stock!');
-    if (alreadyInCart >= product.stock_quantity) return alert('Cannot exceed available stock!');
+  // A product's batches that can still be sold, in the order they're sold by
+  // default: soonest expiry first, no expiry date last. Same rules as the database.
+  const sellableBatchesOf = (productId: number) =>
+    sellableBatches(batches.filter((b) => b.product_id === productId));
+
+  // How many units are already in the basket: of a whole product, or from one batch.
+  const inCartForProduct = (productId: number) =>
+    cart.filter((item) => item.id === productId).reduce((sum, item) => sum + item.quantity, 0);
+  const inCartForBatch = (batchId: number) =>
+    cart.filter((item) => item.batch_id === batchId).reduce((sum, item) => sum + item.quantity, 0);
+
+  // Puts `quantity` of a product in the basket.
+  //   * With a batch (picked in the details window, or the + on a batch line):
+  //     only from that batch.
+  //   * Without one (a scan): we fill from the soonest-expiring batch, and
+  //     carry on into the next batch if that one runs out. If the batches
+  //     aren't known, it's one line for the product and the database picks.
+  // The stock checks happen out here rather than inside setCart, because React
+  // may run that callback twice in development (StrictMode), which would show
+  // the message twice.
+  const addToCart = (product: ProductInventorySummary, quantity = 1, batch?: ProductBatch) => {
+    if (product.stock_quantity <= 0) return notify('Item is out of stock!', 'error');
+    if (inCartForProduct(product.id) + quantity > product.stock_quantity) {
+      return notify('Cannot exceed available stock!', 'error');
+    }
+
+    // Which batch each unit comes from: [{ batch (or null), how many }].
+    const portions: { batch: ProductBatch | null; quantity: number }[] = [];
+    const productBatches = sellableBatchesOf(product.id);
+
+    if (batch) {
+      const free = batch.quantity_remaining - inCartForBatch(batch.id);
+      if (quantity > free) return notify(`Batch ${batch.batch_code} only has ${free} left.`, 'error');
+      portions.push({ batch, quantity });
+    } else if (productBatches.length > 0) {
+      let left = quantity;
+      for (const b of productBatches) {
+        const take = Math.min(left, b.quantity_remaining - inCartForBatch(b.id));
+        if (take > 0) {
+          portions.push({ batch: b, quantity: take });
+          left -= take;
+        }
+        if (left === 0) break;
+      }
+      if (left > 0) return notify('Not enough unexpired stock left for this product.', 'error');
+    } else {
+      portions.push({ batch: null, quantity });
+    }
 
     setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
-        );
+      let next = prev;
+      for (const portion of portions) {
+        const key = lineKey({ id: product.id, batch_id: portion.batch?.id ?? null });
+        const existing = next.find((item) => lineKey(item) === key);
+        next = existing
+          ? next.map((item) =>
+              lineKey(item) === key ? { ...item, quantity: item.quantity + portion.quantity } : item
+            )
+          : [
+              ...next,
+              {
+                ...product,
+                quantity: portion.quantity,
+                batch_id: portion.batch?.id ?? null,
+                batch_code: portion.batch?.batch_code ?? null,
+                batch_expiry: portion.batch?.expiry_date ?? null,
+              },
+            ];
       }
-      return [...prev, { ...product, quantity: 1 }];
+      return next;
     });
   };
 
-  const removeFromCart = (id: number) => {
-    setCart((prev) => prev.filter((item) => item.id !== id));
+  // How many units of this product are near expiry (and so 15% off). Read
+  // from the product list so it reflects the latest stock.
+  const nearExpiryUnitsOf = (id: number) =>
+    products.find((p) => p.id === id)?.near_expiry_count ?? 0;
+
+  // Clicking a product opens its details window (price, expiry, batches) with
+  // an Add to basket button. Scanning a barcode still adds straight away.
+  const detailsProduct = products.find((p) => p.id === detailsProductId) ?? null;
+
+  const removeFromCart = (key: string) => {
+    setCart((prev) => prev.filter((item) => lineKey(item) !== key));
   };
 
+  // How many of this product are on the shelf right now. Read from the product
+  // list (not the basket copy) so it reflects the latest stock.
+  const stockOf = (id: number) =>
+    products.find((p) => p.id === id)?.stock_quantity ?? 0;
+
+  // The batch a basket line comes from (null if it has no batch).
+  const batchOfLine = (item: CartItem) =>
+    item.batch_id === null ? null : batches.find((b) => b.id === item.batch_id) ?? null;
+
+  // Whether the + on a line can add one more: there must be stock left for the
+  // product and, for a batch line, in that batch.
+  const canAddOneMore = (item: CartItem) => {
+    if (inCartForProduct(item.id) >= stockOf(item.id)) return false;
+    const batch = batchOfLine(item);
+    return batch ? inCartForBatch(batch.id) < batch.quantity_remaining : true;
+  };
+
+  // The + button in the basket: one more from the same batch as that line.
+  // Goes through addToCart so the stock checks live in one place.
+  const increaseQuantity = (item: CartItem) => {
+    const product = products.find((p) => p.id === item.id);
+    if (product) addToCart(product, 1, batchOfLine(item) ?? undefined);
+  };
+
+  // The − button. Stops at 1; the × button is for taking an item out
+  // completely, so a quick double-tap on − can't remove it by accident.
+  const decreaseQuantity = (key: string) => {
+    setCart((prev) =>
+      prev.map((item) =>
+        lineKey(item) === key && item.quantity > 1 ? { ...item, quantity: item.quantity - 1 } : item
+      )
+    );
+  };
+
+  // A barcode scanner acts like a keyboard: it types the code into the search
+  // box and presses Enter. So on Enter we find the product with that exact
+  // barcode (or SKU) and put it straight into the basket, then clear the box
+  // so the next item can be scanned right away.
   const handleScan = () => {
     const code = search.trim();
     if (!code) return;
@@ -83,10 +227,13 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
     const match =
       products.find((p) => p.barcode === code) ||
       products.find((p) => (p.sku || '').toLowerCase() === lowered) ||
+      // Typed part of a name and only one product fits? Add that one.
       (filteredProducts.length === 1 ? filteredProducts[0] : undefined);
 
     if (!match) {
-      if (/^\d+$/.test(code)) alert(`No product found with barcode ${code}`);
+      // Only speak up when it looks like a scanned code. For a name search the
+      // grid already shows what matched.
+      if (/^\d+$/.test(code)) notify(`No product found with barcode ${code}`, 'error');
       return;
     }
 
@@ -94,36 +241,115 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
     setSearch('');
   };
 
+  // Suggestions only make sense while someone is still searching. Once the box
+  // holds the member we've already picked, there's nothing left to suggest.
+  const lookupText = phoneSearch.trim();
+  const isSearchingMember =
+    lookupText !== '' && !(selectedCustomer && matchesMember(selectedCustomer, lookupText));
+  const memberSuggestions = isSearchingMember
+    ? customers.filter((c) => memberContains(c, lookupText)).slice(0, MAX_MEMBER_SUGGESTIONS)
+    : [];
+  const suggestionsOpen = showSuggestions && isSearchingMember;
+
+  // Clearing the member box un-picks the member (and any points typed in), so
+  // checkout is blocked again until someone is looked up.
   const handleMemberInput = (value: string) => {
     setPhoneSearch(value);
+    setShowSuggestions(true);
+    setHighlighted(-1);
     if (!value.trim()) {
       setSelectedCustomer(null);
       setPointsToRedeem(0);
     }
   };
 
+  // Picks a member, from the suggestion list or an exact lookup. The box is
+  // filled with their loyalty ID (or email), which is what the checkout checks
+  // to make sure the points go to the right person.
+  const selectMember = (cust: Customer) => {
+    setSelectedCustomer(cust);
+    setPhoneSearch(cust.loyalty_id || cust.email || String(cust.id));
+    // Points typed in for the previous member shouldn't carry over.
+    setPointsToRedeem(0);
+    setShowSuggestions(false);
+    setHighlighted(-1);
+  };
+
   const findCustomer = () => {
-    const query = phoneSearch.trim();
-    if (!query) return;
-    const cust = customers.find((c) => matchesMember(c, query));
+    if (!lookupText) return;
+    // An exact phone / loyalty ID / email first: that's what a scanned loyalty
+    // card gives us. Otherwise, if what was typed only fits one member, take them.
+    const cust =
+      customers.find((c) => matchesMember(c, lookupText)) ??
+      (memberSuggestions.length === 1 ? memberSuggestions[0] : undefined);
+
     if (cust) {
-      setSelectedCustomer(cust);
-      setPointsToRedeem(0);
+      selectMember(cust);
+    } else if (memberSuggestions.length > 1) {
+      // Several people fit (e.g. two "Bryan"s). Let the cashier pick from the list.
+      setShowSuggestions(true);
     } else {
-      alert('Customer not found!');
+      notify('Customer not found!', 'error');
     }
   };
 
-  // --- Bill Math ---
-  const total = roundToCentavos(
+  // Keyboard for the member box: ↑/↓ move through the suggestions, Enter picks
+  // the highlighted one (or does a normal lookup), Esc closes the list.
+  const handleMemberKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    const canMove = suggestionsOpen && memberSuggestions.length > 0;
+
+    if (e.key === 'ArrowDown' && canMove) {
+      e.preventDefault();
+      setHighlighted((i) => (i + 1) % memberSuggestions.length);
+    } else if (e.key === 'ArrowUp' && canMove) {
+      e.preventDefault();
+      setHighlighted((i) => (i <= 0 ? memberSuggestions.length - 1 : i - 1));
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+    } else if (e.key === 'Enter') {
+      const picked = canMove ? memberSuggestions[highlighted] : undefined;
+      if (picked) selectMember(picked);
+      else findCustomer();
+    }
+  };
+
+  // --- Bill math -------------------------------------------------------------
+  // This is only a preview for the cashier. The database recalculates all of
+  // it from the real prices when the sale is saved.
+  //
+  // Each line is priced with the near-expiry markdown:
+  //   * a batch line is all 15% off if that batch is near expiry, otherwise
+  //     all full price;
+  //   * a line without a batch has its soonest-expiring units 15% off
+  //     (they're sold first), the rest full price.
+  const priceOfLine = (item: CartItem) =>
+    item.batch_id !== null
+      ? priceLine(item.price || 0, item.quantity, isNearExpiry(item.batch_expiry) ? item.quantity : 0)
+      : priceLine(item.price || 0, item.quantity, nearExpiryUnitsOf(item.id));
+  const linePrices = new Map(cart.map((item) => [lineKey(item), priceOfLine(item)]));
+  const lineTotalOf = (item: CartItem) => linePrices.get(lineKey(item))?.total ?? 0;
+  const markedDownQtyOf = (item: CartItem) => linePrices.get(lineKey(item))?.markedDownQty ?? 0;
+
+  // Before any discounts, what the near-expiry markdown takes off, and what's
+  // left (the bill that points can then be used on).
+  const fullPriceTotal = roundToCentavos(
     cart.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0)
   );
+  const nearExpirySavings = roundToCentavos(
+    cart.reduce((sum, item) => sum + (linePrices.get(lineKey(item))?.savings ?? 0), 0)
+  );
+  const total = roundToCentavos(fullPriceTotal - nearExpirySavings);
 
+  // The member can't use more points than they have, or more than the bill
+  // needs. Clamping here (not only when typing) also covers the case where
+  // the cashier removes items after entering points.
   const redeemablePoints = maxRedeemablePoints(selectedCustomer?.loyalty_points ?? 0, total);
   const pointsApplied = Math.min(pointsToRedeem, redeemablePoints);
   const discount = discountForPoints(pointsApplied, total);
   const finalTotal = roundToCentavos(total - discount);
 
+  // Whatever gets typed in the points box: whole numbers only, never below 0,
+  // never above what the member can actually use on this bill.
   const handlePointsChange = (value: string) => {
     const points = Math.floor(Number(value) || 0);
     setPointsToRedeem(Math.max(0, Math.min(points, redeemablePoints)));
@@ -131,12 +357,12 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
 
   const handleCheckoutSubmit = async () => {
     if (isSubmitting.current) return;
-    if (cart.length === 0) return alert('Cart is empty!');
+    if (cart.length === 0) return notify('Cart is empty!', 'error');
 
     // Self-serve sales must go on your own account (the database insists). If
     // your loyalty profile didn't load, say so instead of a confusing error.
     if (isSelfServe && !selectedCustomer) {
-      return alert("We couldn't load your loyalty account. Please sign out and sign back in.");
+      return notify("We couldn't load your loyalty account. Please sign out and sign back in.", 'error');
     }
 
     // Whoever's ID is in the member box is who gets the points. If the cashier
@@ -146,21 +372,30 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
     const memberQuery = phoneSearch.trim();
     if (memberQuery && !(selectedCustomer && matchesMember(selectedCustomer, memberQuery))) {
       const typedMember = customers.find((c) => matchesMember(c, memberQuery));
-      if (!typedMember) return alert('Customer not found!');
+      if (!typedMember) return notify('Customer not found!', 'error');
       setSelectedCustomer(typedMember);
       setPointsToRedeem(0);
-      return alert(
-        `Member changed to ${typedMember.name || typedMember.email}. Check the total, then press Complete Transaction again.`
+      return notify(
+        `Member changed to ${typedMember.name || typedMember.email}. Check the total, then press Complete Transaction again.`,
+        'info'
       );
     }
 
+    // Every sale has to go on a loyalty account, so no member = no checkout.
+    // The cashier looks the customer up first (or signs them up). The database
+    // refuses a sale without a member too; this just says so straight away.
+    if (!selectedCustomer) {
+      return notify('Look up a member (name or loyalty ID) before checking out.', 'error');
+    }
+
+    // "Loyalty Points" as the payment method means the whole bill is paid
+    // with points, so there have to be enough points to bring it to ₱0.
+    // The database checks this too. Catching it here just saves a round trip.
     if (paymentMethod === 'Loyalty Points') {
-      if (!selectedCustomer) {
-        return alert('Look up a member first to pay with loyalty points.');
-      }
       if (finalTotal > 0) {
-        return alert(
-          `Not enough points redeemed to cover the bill. ₱${finalTotal.toFixed(2)} is still due.`
+        return notify(
+          `Not enough points redeemed to cover the bill. ₱${finalTotal.toFixed(2)} is still due.`,
+          'error'
         );
       }
     }
@@ -173,98 +408,74 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
         pointsToRedeem: pointsApplied,
         paymentMethod,
       });
-      alert('Checkout completed successfully!');
+      notify('Checkout completed successfully!', 'success');
       setCart([]);
-      setSelectedCustomer(me);
       // Back to the start for the next sale: your own account at self-serve,
       // an empty member box at the till.
       setSelectedCustomer(startingMember);
       setPointsToRedeem(0);
       setPhoneSearch('');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Checkout failed');
+      // Messages like "Not enough stock for ..." come straight from the database.
+      notify(err instanceof Error ? err.message : 'Checkout failed', 'error');
     } finally {
       isSubmitting.current = false;
     }
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 p-6 min-h-screen bg-[#F5F5F5] text-[#333333] font-sans antialiased selection:bg-[#2E7D32]/15 selection:text-[#2E7D32]">
-      {/* Left Column: Product Search & Catalog */}
-      <div className="flex-1 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold tracking-tight text-[#333333]">Items Lookup</h2>
-          <span className="text-xs text-[#333333]/60 font-medium">
-            {filteredProducts.length} items available
-          </span>
-        </div>
-
+    <div className="pos-layout">
+      <div className="pos-left">
+        <h2>Items Lookup</h2>
         <input
           type="text"
           placeholder="Scan barcode, SKU, or search product name..."
-          className="w-full rounded-xl border border-gray-300 bg-[#FFFFFF] px-4 py-3 text-sm text-[#333333] placeholder-[#333333]/40 shadow-sm outline-none transition-all focus:border-[#2E7D32] focus:ring-2 focus:ring-[#2E7D32]/20"
+          className="search-bar"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleScan();
           }}
+          // No browser pop-up of old searches covering the product grid, and no
+          // red spell-check lines under barcodes.
+          autoComplete="off"
+          spellCheck={false}
         />
-
-        {/* Product Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 overflow-y-auto max-h-[calc(100vh-180px)] pr-1">
+        <div className="product-grid">
           {filteredProducts.length === 0 ? (
-            <div className="col-span-full py-12 text-center rounded-2xl border border-dashed border-gray-300 bg-[#FFFFFF]">
-              <p className="text-sm font-medium text-[#333333]/50">No products found</p>
-            </div>
+            <p className="no-products">No products found</p>
           ) : (
             filteredProducts.map((p) => (
-              <div
-                key={p.id}
-                onClick={() => addToCart(p)}
-                className="group relative flex flex-col justify-between rounded-xl border border-gray-200/80 bg-[#FFFFFF] p-4 shadow-sm transition-all hover:border-[#2E7D32]/50 hover:shadow-md cursor-pointer select-none"
-              >
-                <div>
-                  <h4 className="text-sm font-semibold text-[#333333] group-hover:text-[#2E7D32] transition-colors line-clamp-2">
-                    {p.name}
-                  </h4>
-                  <p className="mt-1 text-base font-bold text-[#2E7D32]">
-                    ₱{(p.price || 0).toFixed(2)}
+              <div key={p.id} className="product-card" onClick={() => setDetailsProductId(p.id)}>
+                <h4>{p.name}</h4>
+                {/* The barcode number, so it can be checked against the label. */}
+                <div className="product-barcode">{p.barcode}</div>
+                {p.near_expiry_count > 0 ? (
+                  // Near-expiry stock: show the old price crossed out and the
+                  // 15% off price, so shoppers notice the deal.
+                  <p>
+                    <span className="price-old">₱{(p.price || 0).toFixed(2)}</span>{' '}
+                    <strong className="price-sale">₱{markedDownPrice(p.price || 0).toFixed(2)}</strong>
                   </p>
-                </div>
-
-                <div className="mt-3 flex items-center justify-between pt-2 border-t border-gray-100">
-                  <span
-                    className={`text-xs font-medium ${
-                      p.stock_quantity <= 0 ? 'text-red-500 font-semibold' : 'text-[#333333]/60'
-                    }`}
-                  >
-                    Stock: {p.stock_quantity}
-                  </span>
-                  {p.expires_soon && (
-                    <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200">
-                      {p.near_expiry_count} expiring
+                ) : (
+                  <p>₱{(p.price || 0).toFixed(2)}</p>
+                )}
+                <small>Stock: {p.stock_quantity}</small>
+                {/* How the stock splits across batches, e.g. B-3: 10, B-1: 3. */}
+                <BatchBreakdown batches={sellableBatchesOf(p.id)} />
+                {p.near_expiry_count > 0 && (
+                  <div>
+                    <span className="badge badge-sale">
+                      {NEAR_EXPIRY_PERCENT_OFF}% off · {p.near_expiry_count} expiring soon
                     </span>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             ))
           )}
         </div>
       </div>
 
-      {/* Right Column: Checkout & Cart */}
-      <div className="w-full lg:w-[400px] flex flex-col gap-4">
-        <div className="rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-5 shadow-sm flex flex-col gap-4">
-          <h2 className="text-xl font-bold tracking-tight text-[#333333]">Active Basket</h2>
-
-          {/* Customer Search */}
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder="Phone / Loyalty ID"
-              className="flex-1 rounded-lg border border-gray-300 bg-[#FFFFFF] px-3 py-2 text-xs text-[#333333] placeholder-[#333333]/40 outline-none transition-all focus:border-[#2E7D32] focus:ring-2 focus:ring-[#2E7D32]/20"
-              value={phoneSearch}
-              onChange={(e) => handleMemberInput(e.target.value)}
       <div className="pos-right">
         <h2>Active Basket</h2>
 
@@ -272,135 +483,178 @@ export default function POS({ products = [], customers = [], onCheckout, mode = 
             so they don't get the lookup box. */}
         {!isSelfServe && (
           <div className="customer-panel">
-            <input
-              placeholder="Phone Number / Customer ID"
-              value={phoneSearch}
-              onChange={(e) => handleMemberInput(e.target.value)}
-              // Enter (or scanning a loyalty card) looks the member up, same as the button.
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') findCustomer();
-              }}
-            />
-            <button
-              type="button"
-              onClick={findCustomer}
-              className="rounded-lg bg-[#2E7D32] px-3 py-2 text-xs font-semibold text-[#FFFFFF] shadow-sm hover:bg-[#246628] transition-colors"
-            >
-              Lookup
-            </button>
-          </div>
+            <div className="member-search">
+              <input
+                // Chrome reads the hint text to guess what a box is for. Words
+                // like "email" or "phone" make it pop up its own saved-address
+                // list (even with autoComplete off), so the hint avoids them.
+                // The search still matches names, loyalty IDs, phones and emails.
+                placeholder="Search member or scan loyalty card"
+                value={phoneSearch}
+                onChange={(e) => handleMemberInput(e.target.value)}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setShowSuggestions(false)}
+                // Enter (or scanning a loyalty card) looks the member up, same as the button.
+                onKeyDown={handleMemberKeyDown}
+                // Our own suggestion list replaces the browser's, so turn that off.
+                autoComplete="off"
+                spellCheck={false}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={suggestionsOpen}
+                aria-controls="member-suggestions"
+              />
+
+              {suggestionsOpen && (
+                <ul className="member-suggestions" id="member-suggestions" role="listbox">
+                  {memberSuggestions.length === 0 ? (
+                    <li className="member-suggestion-empty">No members match</li>
+                  ) : (
+                    memberSuggestions.map((c, index) => (
+                      <li
+                        key={c.id}
+                        role="option"
+                        aria-selected={index === highlighted}
+                        className={`member-suggestion${index === highlighted ? ' is-active' : ''}`}
+                        // onMouseDown rather than onClick: it fires before the box
+                        // loses focus, which would close the list first.
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          selectMember(c);
+                        }}
+                        onMouseEnter={() => setHighlighted(index)}
+                      >
+                        <strong>{c.name || c.email}</strong>
+                        <small>
+                          {/* Name falls back to the email, so don't show it twice. */}
+                          {[c.loyalty_id, c.phone, c.name !== c.email ? c.email : null]
+                            .filter(Boolean)
+                            .join(' · ')}
+                          {' · '}{c.loyalty_points ?? 0} pts
+                        </small>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              )}
+            </div>
             <button onClick={findCustomer}>Lookup Member</button>
           </div>
         )}
 
-          {/* Member Card Banner */}
-          {selectedCustomer && (
-            <div className="rounded-xl bg-[#2E7D32]/10 border border-[#2E7D32]/20 p-3 text-xs text-[#333333]">
-              <div className="flex items-center justify-between font-semibold">
-                <span className="flex items-center gap-1.5 text-[#2E7D32]">
-                  👤 {selectedCustomer.name}
-                </span>
-                <span className="rounded-full bg-[#FFFFFF] px-2 py-0.5 text-[11px] font-bold text-[#2E7D32] border border-[#2E7D32]/20 shadow-xs">
-                  {selectedCustomer.loyalty_points ?? 0} pts
-                </span>
+        {selectedCustomer && (
+          <div className="member-info">
+            👤 <strong>{selectedCustomer.name}</strong> | Points:{' '}
+            {selectedCustomer.loyalty_points ?? 0}
+            {(selectedCustomer.loyalty_points ?? 0) > 0 && (
+              <div className="points-redeem">
+                <label>Redeem Points (₱1/pt): </label>
+                <input
+                  type="number"
+                  max={redeemablePoints}
+                  min="0"
+                  value={pointsApplied}
+                  onChange={(e) => handlePointsChange(e.target.value)}
+                  autoComplete="off"
+                />
               </div>
+            )}
+          </div>
+        )}
 
-              {(selectedCustomer.loyalty_points ?? 0) > 0 && (
-                <div className="mt-2.5 flex items-center justify-between pt-2 border-t border-[#2E7D32]/15">
-                  <label className="font-medium text-[#333333]/80 text-[11px]">
-                    Redeem Points (₱1/pt):
-                  </label>
-                  <input
-                    type="number"
-                    max={redeemablePoints}
-                    min="0"
-                    className="w-20 rounded-md border border-gray-300 bg-[#FFFFFF] px-2 py-1 text-xs text-right font-semibold text-[#333333] outline-none focus:border-[#2E7D32]"
-                    value={pointsApplied}
-                    onChange={(e) => handlePointsChange(e.target.value)}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Cart Items List */}
-          <div className="flex flex-col gap-2 max-h-[260px] overflow-y-auto pr-1">
-            {cart.length === 0 ? (
-              <div className="py-8 text-center text-xs text-[#333333]/40 border border-dashed border-gray-200 rounded-xl">
-                Basket is empty
-              </div>
-            ) : (
-              cart.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center justify-between rounded-lg bg-[#F5F5F5] p-2.5 text-xs border border-gray-200/60"
-                >
-                  <div className="flex flex-col">
-                    <span className="font-semibold text-[#333333]">{item.name}</span>
-                    <span className="text-[11px] text-[#333333]/60">x{item.quantity}</span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-[#333333]">
-                      ₱{((item.price || 0) * item.quantity).toFixed(2)}
-                    </span>
+        <div className="cart-list">
+          {cart.length === 0 ? (
+            <p className="empty-cart">Basket is empty</p>
+          ) : (
+            cart.map((item) => (
+              <div key={lineKey(item)} className="cart-item">
+                <div>
+                  <strong>{item.name}</strong>
+                  {/* Which batch this line comes from. */}
+                  {item.batch_code && (
+                    <div className="cart-batch">
+                      Batch {item.batch_code} · {formatExpiry(item.batch_expiry)}
+                    </div>
+                  )}
+                  <div className="qty-control">
                     <button
-                      type="button"
-                      className="flex h-5 w-5 items-center justify-center rounded-md bg-red-100 text-xs font-bold text-red-600 hover:bg-red-200 transition-colors"
-                      onClick={() => removeFromCart(item.id)}
+                      className="btn-sm"
+                      onClick={() => decreaseQuantity(lineKey(item))}
+                      disabled={item.quantity <= 1}
+                      aria-label={`One less ${item.name}`}
                     >
-                      ×
+                      −
+                    </button>
+                    <span className="qty-value">{item.quantity}</span>
+                    <button
+                      className="btn-sm"
+                      onClick={() => increaseQuantity(item)}
+                      // Greyed out once there's no more stock (in this batch).
+                      disabled={!canAddOneMore(item)}
+                      aria-label={`One more ${item.name}`}
+                    >
+                      +
                     </button>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-
-          {/* Summary & Checkout Controls */}
-          <div className="pt-3 border-t border-gray-200 space-y-2 text-xs">
-            <div className="flex justify-between text-[#333333]/70 font-medium">
-              <span>Subtotal</span>
-              <span>₱{total.toFixed(2)}</span>
-            </div>
-            {discount > 0 && (
-              <div className="flex justify-between text-[#2E7D32] font-semibold">
-                <span>Discount (Points)</span>
-                <span>-₱{discount.toFixed(2)}</span>
+                <div>
+                  <span>₱{lineTotalOf(item).toFixed(2)} </span>
+                  <button className="btn-sm btn-danger" onClick={() => removeFromCart(lineKey(item))}>
+                    ×
+                  </button>
+                  {/* Say which units got the markdown, e.g. "2 × ₱80.75 (15% off)". */}
+                  {markedDownQtyOf(item) > 0 && (
+                    <div className="cart-markdown">
+                      {markedDownQtyOf(item)} × ₱{markedDownPrice(item.price || 0).toFixed(2)}{' '}
+                      ({NEAR_EXPIRY_PERCENT_OFF}% off, near expiry)
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-            <div className="flex justify-between text-base font-bold text-[#333333] pt-1 border-t border-gray-100">
-              <span>Total</span>
-              <span className="text-[#2E7D32]">₱{finalTotal.toFixed(2)}</span>
-            </div>
+            ))
+          )}
+        </div>
 
-            <div className="pt-2">
-              <label className="block text-[11px] font-semibold text-[#333333] mb-1">
-                Payment Method
-              </label>
-              <select
-                value={paymentMethod}
-                onChange={(e) =>
-                  setPaymentMethod(e.target.value as 'Cash' | 'Card' | 'Loyalty Points')
-                }
-                className="w-full rounded-lg border border-gray-300 bg-[#FFFFFF] px-3 py-2 text-xs text-[#333333] font-medium outline-none transition-all focus:border-[#2E7D32] focus:ring-2 focus:ring-[#2E7D32]/20"
-              >
-                <option value="Cash">Cash</option>
-                <option value="Card">Card</option>
-                <option value="Loyalty Points">Loyalty Points</option>
-              </select>
+        <div className="summary">
+          <div>Subtotal: ₱{fullPriceTotal.toFixed(2)}</div>
+          {nearExpirySavings > 0 && (
+            <div className="summary-markdown">
+              Near-expiry {NEAR_EXPIRY_PERCENT_OFF}% off: -₱{nearExpirySavings.toFixed(2)}
             </div>
+          )}
+          <div>Points discount: -₱{discount.toFixed(2)}</div>
+          <h3>Total: ₱{finalTotal.toFixed(2)}</h3>
 
-            <button
-              type="button"
-              onClick={handleCheckoutSubmit}
-              className="mt-2 w-full rounded-xl bg-[#2E7D32] py-3 text-sm font-bold text-[#FFFFFF] shadow-md hover:bg-[#246628] active:scale-[0.99] transition-all"
-            >
-              Complete Transaction
-            </button>
-          </div>
+          <select
+            value={paymentMethod}
+            onChange={(e) =>
+              setPaymentMethod(e.target.value as 'Cash' | 'Card' | 'Loyalty Points')
+            }
+          >
+            <option value="Cash">Cash</option>
+            <option value="Card">Card</option>
+            <option value="Loyalty Points">Loyalty Points</option>
+          </select>
+
+          <button className="btn-primary checkout-btn" onClick={handleCheckoutSubmit}>
+            Complete Transaction
+          </button>
         </div>
       </div>
+
+      {detailsProduct && (
+        <ProductDetails
+          product={detailsProduct}
+          batches={sellableBatchesOf(detailsProduct.id)}
+          inBasket={inCartForProduct(detailsProduct.id)}
+          inBasketForBatch={inCartForBatch}
+          onAdd={(quantity, batch) => {
+            addToCart(detailsProduct, quantity, batch);
+            setDetailsProductId(null);
+          }}
+          onClose={() => setDetailsProductId(null)}
+        />
+      )}
     </div>
   );
 }
