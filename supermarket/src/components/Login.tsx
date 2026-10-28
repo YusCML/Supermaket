@@ -103,20 +103,37 @@ export default function Login() {
   };
 
   const inputClass = (field: keyof FieldErrors) =>
-    `auth-input${fieldErrors[field] ? ' auth-input-error' : ''}`;
+    `w-full rounded-lg border bg-[#FFFFFF] px-3.5 py-2.5 text-sm text-[#333333] placeholder-[#333333]/40 outline-none transition-all focus:ring-2 disabled:bg-gray-100 disabled:cursor-not-allowed ${
+      fieldErrors[field]
+        ? 'border-red-500 focus:ring-red-500/20'
+        : 'border-gray-300 focus:border-[#2E7D32] focus:ring-[#2E7D32]/20'
+    }`;
 
   return (
-    <div className="login-page">
-      <div className="login-card">
-        <h1>⚡ SuperMarket Express</h1>
-        <p className="login-subtitle">
-          {mode === 'signup' ? 'Create your account' : 'Sign in to continue'}
-        </p>
+    <div className="flex min-h-screen items-center justify-center bg-[#F5F5F5] px-4 py-12 font-sans antialiased selection:bg-[#2E7D32]/15 selection:text-[#2E7D32]">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-8 shadow-sm">
+        {/* Header */}
+        <div className="text-center">
+          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#2E7D32]/10 text-xl text-[#2E7D32]">
+            ⚡
+          </div>
+          <h1 className="mt-3 text-2xl font-bold tracking-tight text-[#333333]">
+            SuperMarket Express
+          </h1>
+          <p className="mt-1 text-xs text-[#333333]/70">
+            {mode === 'signup' ? 'Create your account' : 'Sign in to continue'}
+          </p>
+        </div>
 
-        <div className="auth-tabs">
+        {/* Mode Switcher Tabs */}
+        <div className="mt-6 flex rounded-lg bg-[#F5F5F5] p-1 border border-gray-200/80">
           <button
             type="button"
-            className={`auth-tab${mode === 'signin' ? ' is-active' : ''}`}
+            className={`flex-1 rounded-md py-2 text-xs font-semibold transition-all ${
+              mode === 'signin'
+                ? 'bg-[#FFFFFF] text-[#2E7D32] shadow-sm'
+                : 'text-[#333333]/70 hover:text-[#333333]'
+            }`}
             onClick={() => switchMode('signin')}
             disabled={loading}
           >
@@ -124,7 +141,11 @@ export default function Login() {
           </button>
           <button
             type="button"
-            className={`auth-tab${mode === 'signup' ? ' is-active' : ''}`}
+            className={`flex-1 rounded-md py-2 text-xs font-semibold transition-all ${
+              mode === 'signup'
+                ? 'bg-[#FFFFFF] text-[#2E7D32] shadow-sm'
+                : 'text-[#333333]/70 hover:text-[#333333]'
+            }`}
             onClick={() => switchMode('signup')}
             disabled={loading}
           >
@@ -132,11 +153,22 @@ export default function Login() {
           </button>
         </div>
 
-        {formError && <div className="login-error">{formError}</div>}
-        {notice && <div className="auth-notice">{notice}</div>}
+        {/* Banners */}
+        {formError && (
+          <div className="mt-4 rounded-lg bg-red-50 p-3 text-xs font-medium text-red-600 border border-red-200">
+            {formError}
+          </div>
+        )}
+        {notice && (
+          <div className="mt-4 rounded-lg bg-[#2E7D32]/10 p-3 text-xs font-medium text-[#2E7D32] border border-[#2E7D32]/20">
+            {notice}
+          </div>
+        )}
 
+        {/* Google OAuth Button */}
         <button
-          className="google-btn"
+          type="button"
+          className="mt-6 flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-[#FFFFFF] px-4 py-2.5 text-sm font-semibold text-[#333333] shadow-sm hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={handleGoogle}
           disabled={loading}
         >
@@ -161,15 +193,27 @@ export default function Login() {
           {loading ? 'Please wait…' : 'Continue with Google'}
         </button>
 
-        <div className="auth-divider">or</div>
+        {/* Divider */}
+        <div className="relative my-6 text-center">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-200" />
+          </div>
+          <span className="relative bg-[#FFFFFF] px-3 text-xs uppercase tracking-wider text-[#333333]/50">
+            or
+          </span>
+        </div>
 
+        {/* Credentials Form */}
         <form
-          className="auth-form"
+          className="space-y-4"
           noValidate
           onSubmit={mode === 'signup' ? handleSignUp : handleSignIn}
         >
-<div className="auth-field">
-            <label className="auth-label" htmlFor="auth-email">
+          <div>
+            <label
+              className="block text-xs font-semibold text-[#333333] mb-1.5"
+              htmlFor="auth-email"
+            >
               Email
             </label>
             <input
@@ -183,12 +227,17 @@ export default function Login() {
               disabled={loading}
             />
             {fieldErrors.email && (
-              <span className="field-error">{fieldErrors.email}</span>
+              <span className="mt-1 block text-xs font-medium text-red-500">
+                {fieldErrors.email}
+              </span>
             )}
           </div>
 
-          <div className="auth-field">
-            <label className="auth-label" htmlFor="auth-password">
+          <div>
+            <label
+              className="block text-xs font-semibold text-[#333333] mb-1.5"
+              htmlFor="auth-password"
+            >
               Password
             </label>
             <input
@@ -204,13 +253,18 @@ export default function Login() {
               disabled={loading}
             />
             {fieldErrors.password && (
-              <span className="field-error">{fieldErrors.password}</span>
+              <span className="mt-1 block text-xs font-medium text-red-500">
+                {fieldErrors.password}
+              </span>
             )}
           </div>
 
           {mode === 'signup' && (
-            <div className="auth-field">
-              <label className="auth-label" htmlFor="auth-confirm">
+            <div>
+              <label
+                className="block text-xs font-semibold text-[#333333] mb-1.5"
+                htmlFor="auth-confirm"
+              >
                 Confirm password
               </label>
               <input
@@ -223,14 +277,16 @@ export default function Login() {
                 disabled={loading}
               />
               {fieldErrors.confirmPassword && (
-                <span className="field-error">{fieldErrors.confirmPassword}</span>
+                <span className="mt-1 block text-xs font-medium text-red-500">
+                  {fieldErrors.confirmPassword}
+                </span>
               )}
             </div>
           )}
 
           <button
             type="submit"
-            className="btn-primary auth-submit"
+            className="w-full rounded-lg bg-[#2E7D32] px-4 py-2.5 text-sm font-semibold text-[#FFFFFF] shadow-md hover:bg-[#246628] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={loading}
           >
             {loading
@@ -241,7 +297,8 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="login-footer">
+        {/* Footer */}
+        <p className="mt-6 text-center text-xs text-[#333333]/60">
           {mode === 'signup'
             ? 'Confirm your email address to activate your account.'
             : 'Use your Google account or an email address.'}
