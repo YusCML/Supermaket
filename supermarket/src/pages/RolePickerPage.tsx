@@ -28,9 +28,13 @@ export default function RolePickerPage() {
     <div className="flex min-h-screen items-center justify-center bg-[#F5F5F5] px-4 py-12 font-sans antialiased selection:bg-[#2E7D32]/15 selection:text-[#2E7D32]">
       <div className="w-full max-w-md rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-8 shadow-xs">
         {/* Header */}
-        <div className="text-center">
-          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#2E7D32]/10 text-xl text-[#2E7D32]">
-            ⚡
+        <div className="flex flex-col items-center text-center">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#FFFFFF]/50 shadow-xs">
+            <img 
+              src="/sp%20logo.jpg" 
+              alt="SuperMarket Express Logo" 
+              className="h-8 w-auto object-contain" 
+            />
           </div>
           <h1 className="mt-3 text-2xl font-bold tracking-tight text-[#333333]">
             SuperMarket Express
@@ -64,7 +68,7 @@ export default function RolePickerPage() {
         {/* Sign Out Button */}
         <button
           type="button"
-          className="mt-6 w-full rounded-xl border border-gray-300 bg-[#FFFFFF] py-2.5 text-xs font-semibold text-[#333333] shadow-2xs hover:bg-[#F5F5F5] transition-colors"
+          className="mt-6 w-full rounded-xl border border-gray-300 bg-[#FFFFFF] py-2.5 text-xs font-semibold text-[#333333] shadow-2xs hover:bg-[#F5F5F5] transition-colors cursor-pointer"
           onClick={signOut}
         >
           Sign out

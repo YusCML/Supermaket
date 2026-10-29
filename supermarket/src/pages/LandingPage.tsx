@@ -14,12 +14,15 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[#F5F5F5] text-[#333333] font-sans antialiased selection:bg-[#2E7D32]/15 selection:text-[#2E7D32]">
       {/* Navigation */}
       <nav className="sticky top-0 z-20 border-b border-gray-200 bg-[#FFFFFF]/90 backdrop-blur-md">
-        <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 text-base font-semibold tracking-tight text-[#333333]">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#2E7D32]/10 text-[#2E7D32]">
-              ⚡
-            </span>
-            <span>SuperMarket Express</span>
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-3">
+        {/* Brand Container with Logo on the Left */}
+        <div className="flex items-center gap-2.5 text-base font-bold tracking-tight text-[#333333]">
+          <img 
+              src="/sp%20logo.jpg" 
+              alt="SuperMarket Express Logo" 
+              className="h-8 w-auto object-contain" 
+            />
+          <span>SuperMarket Express</span>
           </div>
           <div className="flex items-center gap-6">
             <a

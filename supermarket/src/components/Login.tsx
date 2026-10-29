@@ -114,13 +114,17 @@ export default function Login() {
       <div className="w-full max-w-md rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-8 shadow-sm">
         {/* Header */}
         <div className="text-center">
-          <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#2E7D32]/10 text-xl text-[#2E7D32]">
-            ⚡
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#FFFFFF]/50 shadow-xs">
+            <img 
+              src="/sp%20logo.jpg" 
+              alt="SuperMarket Express Logo" 
+              className="h-8 w-auto object-contain" 
+            />
           </div>
           <h1 className="mt-3 text-2xl font-bold tracking-tight text-[#333333]">
             SuperMarket Express
           </h1>
-          <p className="mt-1 text-xs text-[#333333]/70">
+          <p className="mt-2 text-xs leading-relaxed text-[#333333]/70">
             {mode === 'signup' ? 'Create your account' : 'Sign in to continue'}
           </p>
         </div>
