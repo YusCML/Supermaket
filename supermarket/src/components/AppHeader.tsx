@@ -14,22 +14,42 @@ export default function AppHeader({ role }: AppHeaderProps) {
   const navigate = useNavigate();
 
   return (
-    <header className="app-header">
-      <span className="user-info">
-        Signed in as <strong>{user?.email}</strong>
-        <span className="admin-badge">{ROLE_INFO[role].label}</span>
-      </span>
-      <span className="header-actions">
-        {/* Only worth showing if there's another role to switch to. */}
-        {availableRoles.length > 1 && (
-          <button className="signout-btn" onClick={() => navigate('/app')}>
-            Switch role
+    <header className="border-b border-gray-200/80 bg-[#FFFFFF] px-6 py-2.5 font-sans antialiased text-[#333333]">
+      <div className="mx-auto flex max-w-7xl items-center justify-between">
+        {/* User Info & Current Role Badge */}
+        <div className="flex items-center gap-3 text-xs">
+          <span className="text-[#333333]/70">
+            Signed in as <strong className="font-semibold text-[#333333]">{user?.email}</strong>
+          </span>
+
+          <span className="inline-flex items-center gap-1 rounded-full bg-[#2E7D32]/10 px-2.5 py-0.5 text-[11px] font-bold text-[#2E7D32] border border-[#2E7D32]/20">
+            <span>{ROLE_INFO[role].icon}</span>
+            <span>{ROLE_INFO[role].label}</span>
+          </span>
+        </div>
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-2">
+          {/* Only worth showing if there's another role to switch to. */}
+          {availableRoles.length > 1 && (
+            <button
+              type="button"
+              className="rounded-lg border border-gray-300 bg-[#FFFFFF] px-3 py-1.5 text-xs font-semibold text-[#333333] shadow-2xs hover:bg-[#F5F5F5] transition-colors cursor-pointer"
+              onClick={() => navigate('/app')}
+            >
+              Switch role
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="rounded-lg border border-gray-300 bg-[#FFFFFF] px-3 py-1.5 text-xs font-semibold text-[#333333] shadow-2xs hover:bg-red-50 hover:text-red-700 hover:border-red-200 transition-colors cursor-pointer"
+            onClick={signOut}
+          >
+            Sign out
           </button>
-        )}
-        <button className="signout-btn" onClick={signOut}>
-          Sign out
-        </button>
-      </span>
+        </div>
+      </div>
     </header>
   );
 }
