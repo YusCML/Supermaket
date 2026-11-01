@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { AlertTriangle, Clock, ImageIcon } from 'lucide-react';
 import type { NewProductInput, Product, ProductBatch, ProductInventorySummary, ReceiveStockInput, UpdateProductInput, WriteOffStockInput } from '../types/app';
+import { api } from '../lib/api';
 import { useNotify } from '../contexts/NotifyContext';
 import { formatExpiry, sellableBatches } from '../lib/expiry';
 import { NEAR_EXPIRY_PERCENT_OFF } from '../lib/pricing';
@@ -10,13 +12,7 @@ interface InventoryProps {
   products: Product[];
   inventory: ProductInventorySummary[];
   batches: ProductBatch[];
-  // Cashiers get this screen read-only: they can check stock levels, expiry
-  // dates and batches, but only admins add products or restock. The database
-  // enforces that too; hiding the forms just keeps cashiers from hitting errors.
   readOnly?: boolean;
-  // Admin actions. Not needed (and not passed) when readOnly is on.
-  // They return what the database generated: the saved product (with its
-  // barcode) and the new batch code.
   onAddProduct?: (product: NewProductInput) => Promise<Product>;
   onUpdateProduct?: (productId: number, product: UpdateProductInput) => Promise<void>;
   onReceiveStock?: (input: ReceiveStockInput) => Promise<string>;
@@ -25,8 +21,6 @@ interface InventoryProps {
   onRefresh?: () => void;
 }
 
-// No barcode or batch code boxes: the database always generates both, and
-// keeps them unique.
 const emptyForm = {
   sku: '',
   name: '',
@@ -64,13 +58,16 @@ export default function Inventory({
   onRefresh,
 }: InventoryProps) {
   const [form, setForm] = useState(emptyForm);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  
   const [receiveForm, setReceiveForm] = useState(emptyReceive);
   const [writeOffForm, setWriteOffForm] = useState(emptyWriteOff);
+  
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editForm, setEditForm] = useState<UpdateProductInput | null>(null);
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  
   const [savingEdit, setSavingEdit] = useState(false);
-  // The edit form opens at the top of the page, but the Edit buttons are in
-  // the table further down. Scroll it into view, or it looks like nothing happened.
   const editFormRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (editingProduct) editFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -87,6 +84,11 @@ export default function Inventory({
     e.preventDefault();
     if (!onAddProduct) return;
     try {
+      let imageUrl = null;
+      if (imageFile) {
+        imageUrl = await api.uploadProductImage(imageFile);
+      }
+
       const saved = await onAddProduct({
         sku: form.sku,
         name: form.name,
@@ -95,8 +97,10 @@ export default function Inventory({
         cost: parseFloat(form.cost),
         stock_quantity: parseInt(form.stock_quantity, 10),
         reorder_level: parseInt(form.reorder_level, 10),
+        image_url: imageUrl,
       });
       setForm(emptyForm);
+      setImageFile(null);
       notify(`${form.name} was added to the catalog with barcode ${saved?.barcode ?? '(assigned)'}.`, 'success');
     } catch (err) {
       notify(err instanceof Error ? err.message : 'Could not save the product', 'error');
@@ -185,11 +189,13 @@ export default function Inventory({
       cost: product.cost,
       reorder_level: product.reorder_level,
     });
+    setEditImageFile(null);
   };
 
   const cancelEditing = () => {
     setEditingProduct(null);
     setEditForm(null);
+    setEditImageFile(null);
   };
 
   const handleUpdateProduct = async (e: FormEvent) => {
@@ -198,7 +204,17 @@ export default function Inventory({
 
     setSavingEdit(true);
     try {
-      await onUpdateProduct(editingProduct.id, editForm);
+      let newImageUrl = editingProduct.image_url;
+      
+      if (editImageFile) {
+        newImageUrl = await api.uploadProductImage(editImageFile);
+      }
+
+      await onUpdateProduct(editingProduct.id, {
+        ...editForm,
+        image_url: newImageUrl,
+      });
+      
       notify(`${editForm.name} was updated.`, 'success');
       cancelEditing();
     } catch (err) {
@@ -226,7 +242,6 @@ export default function Inventory({
 
   return (
     <div className="p-6 space-y-6 min-h-screen bg-[#F5F5F5] text-[#333333] font-sans antialiased selection:bg-[#2E7D32]/15 selection:text-[#2E7D32]">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold tracking-tight text-[#333333]">
           Catalog & Stock Control
@@ -241,7 +256,7 @@ export default function Inventory({
 
       {!readOnly && (
         <div className="space-y-6">
-          {/* Edit Product Form */}
+          
           {editingProduct && editForm && (
             <form
               ref={editFormRef}
@@ -308,6 +323,19 @@ export default function Inventory({
                   required
                 />
               </div>
+              
+              <div className="pt-2">
+                <label className="block text-[11px] font-bold text-[#333333]/60 uppercase tracking-wider mb-1">
+                  Update Image (Leave blank to keep current)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setEditImageFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-[#333333] file:mr-4 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#2E7D32]/10 file:text-[#2E7D32] hover:file:bg-[#2E7D32]/20 cursor-pointer"
+                />
+              </div>
+
               <div className="flex items-center gap-2 pt-2">
                 <button
                   type="submit"
@@ -328,9 +356,8 @@ export default function Inventory({
             </form>
           )}
 
-          {/* Grid of Action Forms */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Add New Product */}
+            
             <form
               className="rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-5 shadow-xs space-y-4 flex flex-col justify-between"
               onSubmit={handleSubmit}
@@ -396,6 +423,18 @@ export default function Inventory({
                     className={inputStyle}
                     required
                   />
+                  
+                  <div className="pt-2">
+                    <label className="block text-[11px] font-bold text-[#333333]/60 uppercase tracking-wider mb-1">
+                      Product Image
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+                      className="w-full text-xs text-[#333333] file:mr-4 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#2E7D32]/10 file:text-[#2E7D32] hover:file:bg-[#2E7D32]/20 cursor-pointer"
+                    />
+                  </div>
                 </div>
               </div>
               <button
@@ -406,7 +445,6 @@ export default function Inventory({
               </button>
             </form>
 
-            {/* Receive Stock */}
             <form
               className="rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-5 shadow-xs space-y-4 flex flex-col justify-between"
               onSubmit={handleReceive}
@@ -456,7 +494,6 @@ export default function Inventory({
               </button>
             </form>
 
-            {/* Write Off Stock */}
             <form
               className="rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-5 shadow-xs space-y-4 flex flex-col justify-between"
               onSubmit={handleWriteOff}
@@ -550,10 +587,8 @@ export default function Inventory({
         </div>
       )}
 
-      {/* Toolbar */}
       <div className="flex items-center gap-3 pt-2">
-        {!readOnly && (
-          <button
+        {!readOnly && (          <button
             className="rounded-lg bg-[#2E7D32] px-4 py-2 text-xs font-semibold text-[#FFFFFF] shadow-xs hover:bg-[#246628] disabled:opacity-50 transition-colors"
             onClick={handleProcessExpired}
             disabled={processingExpired}
@@ -571,7 +606,6 @@ export default function Inventory({
         )}
       </div>
 
-      {/* Inventory Data Table */}
       <div className="overflow-hidden rounded-2xl border border-gray-200/80 bg-[#FFFFFF] shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-[#333333]">
@@ -618,7 +652,20 @@ export default function Inventory({
                         <BarcodeImage value={p.barcode} height={30} barWidth={1} fontSize={11} />
                       </div>
                     </td>
-                    <td className="px-4 py-3 font-semibold text-[#333333]">{p.name}</td>
+                    
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-[#F5F5F5] flex items-center justify-center shrink-0 overflow-hidden border border-gray-200/60">
+                          {p.image_url ? (
+                            <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <ImageIcon className="size-4 text-[#333333]/20" />
+                          )}
+                        </div>
+                        <span className="font-semibold text-[#333333]">{p.name}</span>
+                      </div>
+                    </td>
+
                     <td className="px-4 py-3 text-[#333333]/70">{p.category}</td>
                     <td className="px-4 py-3 font-medium">₱{p.price.toFixed(2)}</td>
                     <td className="px-4 py-3 font-bold space-y-1">
@@ -657,24 +704,24 @@ export default function Inventory({
                       </details>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-wrap gap-2">
                         {isOutOfStock && (
-                          <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-bold text-red-700 border border-red-200">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-red-700">
                             No Stock
                           </span>
                         )}
                         {isLow && (
-                          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200 inline-flex items-center gap-1">
-                            <span>⚠︎</span> Low Stock
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-800">
+                            <AlertTriangle className="size-3" /> Low Stock
                           </span>
                         )}
                         {isExpiring && (
-                          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200">
-                            ⏳ Expires soon
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-800">
+                            <Clock className="size-3" /> Expires soon
                           </span>
                         )}
                         {!isOutOfStock && !isLow && !isExpiring && (
-                          <span className="rounded-full bg-[#2E7D32]/10 px-2.5 py-0.5 text-[10px] font-bold text-[#2E7D32] border border-[#2E7D32]/20">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#2E7D32]">
                             OK
                           </span>
                         )}

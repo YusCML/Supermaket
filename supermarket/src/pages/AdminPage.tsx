@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useEffect } from 'react';
+import { ShoppingCart, Package, Star, BarChart3, Users } from 'lucide-react';
 import POS from '../components/POS';
 import Inventory from '../components/Inventory';
 import Loyalty from '../components/Loyalty';
@@ -24,16 +25,13 @@ const Analytics = lazy(() => import('../components/Analytics'));
 type AdminTab = 'pos' | 'inventory' | 'loyalty' | 'analytics' | 'users';
 
 const ADMIN_TABS: NavTab<AdminTab>[] = [
-  { id: 'pos', label: '🛒 POS Checkout' },
-  { id: 'inventory', label: '📦 Inventory Management' },
-  { id: 'loyalty', label: '⭐ Loyalty & Rewards' },
-  { id: 'analytics', label: '📊 Analytics' },
-  { id: 'users', label: '👥 Users & Roles' },
+  { id: 'pos', label: 'POS Checkout', icon: <ShoppingCart /> },
+  { id: 'inventory', label: 'Inventory', icon: <Package /> },
+  { id: 'loyalty', label: 'Loyalty & Rewards', icon: <Star /> },
+  { id: 'analytics', label: 'Analytics', icon: <BarChart3 /> },
+  { id: 'users', label: 'Users & Roles', icon: <Users /> },
 ];
 
-// The admin interface (/admin). Only admins can open this page (see
-// ProtectedRoute in App.tsx), so nothing in here has to check the role again.
-// The database still checks every admin action on its own.
 export default function AdminPage() {
   const { user, refreshRoles } = useAuth();
   const { notify } = useNotify();
@@ -56,10 +54,8 @@ export default function AdminPage() {
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [analyticsRefreshKey, setAnalyticsRefreshKey] = useState(0);
-  // Who holds which staff role, for the Users & Roles tab.
   const [staffRoles, setStaffRoles] = useState<Record<string, AppRole[]>>({});
 
-  // Load the role assignments whenever Users & Roles is opened.
   useEffect(() => {
     if (activeTab !== 'users') return;
 
@@ -75,8 +71,6 @@ export default function AdminPage() {
     };
   }, [activeTab]);
 
-  // Refresh member records when Loyalty & Rewards or Users & Roles is opened,
-  // so new sign-ups and fresh points show up without reloading the page.
   useEffect(() => {
     if (activeTab !== 'loyalty' && activeTab !== 'users') return;
 
@@ -139,8 +133,6 @@ export default function AdminPage() {
     };
   }, [activeTab]);
 
-  // Both hand back what the database generated (the new product, with its
-  // barcode / the new batch code) so the Inventory screen can show it.
   const handleAddProduct = async (product: NewProductInput) => {
     const saved = await api.addProduct(product);
     await loadData();
@@ -168,9 +160,6 @@ export default function AdminPage() {
     await loadData();
   };
 
-  // Save the new roles, then re-read them so the table shows what the
-  // database actually stored. If you just changed your own roles, update
-  // your "Switch role" options too.
   const handleSaveRoles = async (userId: string, roles: AppRole[]) => {
     await api.setUserRoles(userId, roles);
     setStaffRoles(await api.getStaffRoles());

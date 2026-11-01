@@ -15,14 +15,7 @@ import type {
   WriteOffStockInput,
 } from '../types/app';
 
-// Every call the app makes to the database lives here.
-//
-// Who can do what is enforced by the database itself (row-level security, see
-// supabase/migrations/20261026120100_row_level_security.sql), not by this file.
-// Hiding a tab in the UI is just for convenience. Even if a cashier called
-// addProduct() from the console, the database would refuse.
 export const api = {
-  // The full catalog. Everyone signed in can read it.
   async getProducts(): Promise<Product[]> {
     const { data, error } = await supabase
       .from('products')
@@ -56,9 +49,6 @@ export const api = {
     return (data ?? []) as ProductBatch[];
   },
 
-  // Admin only. Adds a new stock batch. The database always makes up the
-  // batch code (B-1, B-2, ...) and it's unique store-wide; we return it so
-  // the screen can tell the admin which code was given.
   async receiveStock(input: ReceiveStockInput): Promise<string> {
     const { data, error } = await supabase.rpc('receive_stock', {
       p_product_id: input.product_id,
@@ -101,11 +91,6 @@ export const api = {
     return data as SalesAnalytics;
   },
 
-  // Loyalty members: EVERY account (customers, cashiers, admins and the store
-  // owner alike) has a row in the `customer` table holding their loyalty ID
-  // and points, and the name/phone live on `users`. We fetch both in one go and flatten them into a single object for
-  // the POS lookup and the Loyalty tab. Only admins and cashiers can see other
-  // people's rows.
   async getCustomers(): Promise<Customer[]> {
     const { data, error } = await supabase
       .from('customer')
@@ -115,8 +100,6 @@ export const api = {
     return (data ?? []).map((row: any) => ({
       id: row.user_id,
       email: row.users?.email ?? '',
-      // People who signed up with email/password haven't given us a name, so
-      // show their email instead of "N/A". That way you can tell them apart.
       name: row.users?.name || row.users?.email || null,
       phone: row.users?.phone ?? null,
       role: row.users?.role ?? 'customer',
@@ -126,9 +109,6 @@ export const api = {
     })) as Customer[];
   },
 
-  // Admin only: who holds which staff role, as { userId: ['cashier', 'admin'] }.
-  // A person is a cashier / admin when they have a row in that table.
-  // Customer isn't listed because everyone is one.
   async getStaffRoles(): Promise<Record<string, AppRole[]>> {
     const [cashiers, admins] = await Promise.all([
       supabase.from('cashier').select('user_id'),
@@ -147,19 +127,12 @@ export const api = {
     return staffRoles;
   },
 
-  // Admin only: give someone exactly these roles, e.g. ['customer', 'cashier']
-  // (the Users & Roles tab). The database checks the caller is an admin and
-  // won't let admins remove their own admin role, so the store always keeps
-  // at least one (see set_user_roles in the role_interfaces_and_self_checkout
-  // migration). Customer is always kept, whatever is sent.
   async setUserRoles(userId: string, roles: AppRole[]): Promise<void> {
     const { error } = await supabase.rpc('set_user_roles', {
       p_user_id: userId,
       p_roles: roles,
     });
     if (error) {
-      // PGRST202 = the database doesn't have this function yet, i.e. the
-      // migration hasn't been run. Say that instead of a cryptic error.
       if (error.code === 'PGRST202') {
         throw new Error(
           'Role changes need a database update that hasn\'t been applied yet ' +
@@ -170,8 +143,6 @@ export const api = {
     }
   },
 
-  // The points log, newest first. Admin only: for anyone else the database
-  // simply returns no rows, which is fine since they never see the Loyalty tab.
   async getLoyaltyLogs(): Promise<LoyaltyLog[]> {
     const { data, error } = await supabase
       .from('loyalty_logs')
@@ -184,10 +155,23 @@ export const api = {
     return (data ?? []) as LoyaltyLog[];
   },
 
-  // Admin only. Every product needs a barcode (it's how the POS scans items),
-  // and the database always generates it: a unique in-store EAN-13 (see the
-  // batch_choice_and_generated_codes migration). So we never send one, and the
-  // saved product that comes back tells us which barcode it got.
+  async uploadProductImage(file: File): Promise<string> {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from('product-images')
+      .upload(fileName, file);
+
+    if (uploadError) throw uploadError;
+
+    const { data } = supabase.storage
+      .from('product-images')
+      .getPublicUrl(fileName);
+
+    return data.publicUrl;
+  },
+
   async addProduct(product: NewProductInput): Promise<Product> {
     const payload = {
       ...product,
@@ -199,23 +183,13 @@ export const api = {
       .select();
 
     if (error) {
-      // Turn the two errors people actually run into into something readable.
-      // 23505 = a unique column already has this value (only the SKU can
-      //         clash now, since barcodes are generated).
-      // 42501 = the security rules blocked it, i.e. the user isn't an admin.
-      if (error.code === '23505') {
-        throw new Error('A product with that SKU already exists.');
-      }
-      if (error.code === '42501') {
-        throw new Error('Only admins can add products.');
-      }
+      if (error.code === '23505') throw new Error('A product with that SKU already exists.');
+      if (error.code === '42501') throw new Error('Only admins can add products.');
       throw error;
     }
     return (data?.[0] ?? null) as Product;
   },
 
-  // Admin only. Barcode and stock quantity deliberately aren't editable here:
-  // barcodes are permanent and stock belongs to the batch receiving workflow.
   async updateProduct(productId: number, product: UpdateProductInput): Promise<Product> {
     const { data, error } = await supabase
       .from('products')
@@ -230,32 +204,18 @@ export const api = {
       .single();
 
     if (error) {
-      if (error.code === '23505') {
-        throw new Error('A product with that SKU already exists.');
-      }
-      if (error.code === '42501') {
-        throw new Error('Only admins can edit products.');
-      }
+      if (error.code === '23505') throw new Error('A product with that SKU already exists.');
+      if (error.code === '42501') throw new Error('Only admins can edit products.');
       throw error;
     }
 
     return data as Product;
   },
 
-  // Saves a sale. We only send WHAT is being bought, WHO the member is and how
-  // many points to use. The database looks up the real prices, checks stock,
-  // works out the totals and updates the member's points, all in one go (see
-  // process_pos_checkout in the secure_checkout migration).
-  //
-  // If anything is wrong (out of stock, not enough points...), the database
-  // cancels the whole sale and its error message comes back here, so the POS
-  // can show it to the cashier.
   async processCheckout(payload: CheckoutPayload): Promise<CheckoutReceipt> {
     const { cart, customerId, pointsToRedeem, paymentMethod } = payload;
 
     const { data, error } = await supabase.rpc('process_pos_checkout', {
-      // batch_id: the batch that was picked; null lets the database take
-      // the soonest-expiring stock.
       p_cart_items: cart.map((item) => ({
         product_id: item.id,
         quantity: item.quantity,
