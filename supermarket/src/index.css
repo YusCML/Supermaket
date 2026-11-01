@@ -1,60 +1,154 @@
 @import "tailwindcss";
 
+/*
+  Design tokens.
+  Every colour the app uses lives here with a readable name, so components can
+  say `bg-brand` or `text-ink-muted` instead of repeating hex codes like
+  `bg-[#2E7D32]` or `text-[#333333]/70`. Change a value here and the whole app
+  follows.
+*/
 @theme {
   /* ── Font ──────────────────────────────────────────────── */
   --font-sans: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
-  /* ── Brand ─────────────────────────────────────────────── */
-  --color-brand: #2E7D32;
-  --color-brand-hover: #246628;
-  --color-brand-soft: #2E7D3219;
+  /* ── The store palette ─────────────────────────────────────
+     Four colours: green #00873E, yellow #ECE852, amber #FFC145, red #FB4141.
+     (The green was originally #5CB338; it was deepened towards Grab's green
+     because the bright one was tiring to look at.)
 
-  /* ── Text / surface ────────────────────────────────────── */
-  --color-ink: #333333;
-  --color-ink-muted: #333333b3;
-  --color-surface: #FFFFFF;
-  --color-canvas: #F5F5F5;
+     They're bright, so they're used as FILLS (buttons, highlights, bars).
+     Text ON the green is white (4.6:1, readable). Text on yellow or amber is the dark brand-ink.
+     Small coloured TEXT on white uses the "-strong" shade of the same colour;
+     the bright ones are too light to read as text on white. */
 
-  /* ── Semantic tokens consumed by shadcn (Nova preset) ──── */
-  --color-primary: #2E7D32;
+  /* Green: main buttons, the selected menu item, chart bars, success */
+  --color-brand: #00873E;
+  --color-brand-hover: #00732F;
+  --color-brand-strong: #006B31; /* green text on white, canvas and light-green tints (6.6:1) */
+  --color-brand-ink: #14290B;    /* dark text placed ON yellow or amber (12:1 / 7.8:1) */
+  --color-brand-soft: #00873E1F;
+
+  /* Yellow: deals (15% off), information notes, highlights */
+  --color-sun: #ECE852;
+
+  /* Amber: warnings such as low stock and "expires soon" */
+  --color-warning: #FFC145;
+  --color-warning-strong: #7A4E00; /* amber text (≥ 5.9:1 on white and on light amber) */
+
+  /* Red: errors, out of stock, money lost */
+  --color-danger: #FB4141;
+  --color-danger-strong: #C62828; /* red text, and the red "destroy" buttons with white text (5.6:1) */
+
+  /* ── Text ──────────────────────────────────────────────── */
+  /* ink        = normal text
+     ink-muted  = secondary text (labels, hints). Still readable: ≥ 4.5:1 on white and on canvas.
+     ink-subtle = placeholders, separators and decorative icons only. Too light for real text. */
+  --color-ink: #2A2F26;
+  --color-ink-muted: #5E6558;
+  --color-ink-subtle: #8C9286;
+
+  /* ── Surfaces ──────────────────────────────────────────── */
+  /* A very white look: cards, tables and pop-ups are pure white, the page
+     behind them is only a touch off-white, and thin grey borders separate
+     them. `subtle` is the one light grey used inside components: table
+     headers, hover highlights, segmented switches, picture placeholders. */
+  --color-surface: #FFFFFF; /* cards, tables, dialogs */
+  --color-canvas: #FCFCFB;  /* page background (almost white) */
+  --color-subtle: #F3F5F1;  /* light grey fills inside components */
+
+  /* ── Semantic tokens consumed by the shadcn components ─── */
+  --color-primary: #00873E;
   --color-primary-foreground: #FFFFFF;
-  --color-secondary: #F5F5F5;
-  --color-secondary-foreground: #333333;
-  --color-muted: #F5F5F5;
-  --color-muted-foreground: #333333b3;
-  --color-accent: #2E7D3219;
-  --color-accent-foreground: #2E7D32;
-  --color-destructive: #DC2626;
+  --color-secondary: #F3F5F1;
+  --color-secondary-foreground: #2A2F26;
+  --color-muted: #F3F5F1;
+  --color-muted-foreground: #5E6558;
+  --color-accent: #00873E1F;
+  --color-accent-foreground: #006B31;
+  --color-destructive: #C62828;
   --color-destructive-foreground: #FFFFFF;
-  --color-border: #E5E7EB;
-  --color-input: #D1D5DB;
-  --color-ring: #2E7D3255;
+  --color-border: #E3E7DD;
+  --color-input: #D0D6C9;
+  --color-ring: #006B31;
   --color-background: #FFFFFF;
-  --color-foreground: #333333;
+  --color-foreground: #2A2F26;
   --color-card: #FFFFFF;
-  --color-card-foreground: #333333;
+  --color-card-foreground: #2A2F26;
   --color-popover: #FFFFFF;
-  --color-popover-foreground: #333333;
+  --color-popover-foreground: #2A2F26;
 
-  /* ── Radii ─────────────────────────────────────────────── */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
+  /* ── Corner rounding ───────────────────────────────────── */
+  /* Two shapes in the app:
+       PILLS (rounded-full): everything you click or type in — buttons, text
+         boxes, dropdowns, switches, menu items. Multi-line text boxes use
+         rounded-2xl because a full pill can't fit several lines.
+       SMALL CORNERS for containers:
+         rounded-sm  4px  small pieces inside other things
+         rounded-md  6px  image boxes, little panels
+         rounded-lg  8px  cards, tables, pop-up windows
+     Status labels are never boxed or pill-shaped: they're plain coloured text. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+
+  /* ── Animations ────────────────────────────────────────── */
+  /* `animate-notice-in`: pop-up notices slide down a few pixels as they appear. */
+  --animate-notice-in: notice-in 180ms ease-out;
+
+  @keyframes notice-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
 }
 
-:root {
-  color: #333333;
-  background: #F5F5F5;
-  font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  -webkit-font-smoothing: antialiased;
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Selected text gets a yellow highlighter look. */
+  ::selection {
+    background: var(--color-sun);
+    color: var(--color-brand-ink);
+  }
+
+  /* Keyboard focus ring. It only shows when navigating with the keyboard
+     (not on mouse clicks), so people using Tab can always see where they are.
+     It uses the darker green so it stands out against white (3:1 or more).
+     Text boxes draw their own green border + glow instead (see ui/input.tsx). */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-strong);
+    outline-offset: 2px;
+  }
+
+  /* Anything clickable shows the hand cursor, so components don't each
+     need a `cursor-pointer` class. */
+  button:not(:disabled),
+  [role='button'],
+  summary,
+  select:not(:disabled),
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled) {
+    cursor: pointer;
+  }
 }
 
-::selection {
-  background: #2E7D3226;
-  color: #2E7D32;
-}
-
-*:focus-visible {
-  outline: none;
+/* People who turn on "reduce motion" in their OS get (almost) no animations. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

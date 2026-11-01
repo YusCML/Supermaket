@@ -6,7 +6,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Check, AlertTriangle, Info } from 'lucide-react';
+import { Check, AlertTriangle, Info, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Button } from '../components/ui/button';
 
 type NoticeType = 'success' | 'error' | 'info';
 
@@ -21,6 +23,9 @@ interface ConfirmOptions {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  // true for actions that remove or destroy something: the confirm button
+  // turns red so it's obvious this one matters.
+  danger?: boolean;
 }
 
 interface NotifyContextValue {
@@ -35,6 +40,16 @@ const NOTICE_DURATION_MS: Record<NoticeType, number> = {
   success: 3000,
   info: 4000,
   error: 6000,
+};
+
+// Colour and icon for each kind of notice. The coloured strip on the left and
+// the icon both say what kind it is, so colour isn't the only clue.
+// `icon` is the colour of the little circle and the symbol inside it: dark
+// symbols on the bright green and yellow, white on red.
+const NOTICE_STYLE: Record<NoticeType, { strip: string; icon: string; Icon: typeof Check }> = {
+  success: { strip: 'border-l-brand', icon: 'bg-brand text-white', Icon: Check },
+  error: { strip: 'border-l-danger', icon: 'bg-danger text-white', Icon: AlertTriangle },
+  info: { strip: 'border-l-sun', icon: 'bg-sun text-brand-ink', Icon: Info },
 };
 
 export function NotifyProvider({ children }: { children: ReactNode }) {
@@ -84,44 +99,76 @@ export function NotifyProvider({ children }: { children: ReactNode }) {
     <NotifyContext.Provider value={{ notify, askToConfirm }}>
       {children}
 
-      <div className="notice-stack" aria-live="polite">
-        {notices.map((n) => (
-          <div
-            key={n.id}
-            className={`notice notice-${n.type}`}
-            role={n.type === 'error' ? 'alert' : 'status'}
-          >
-            <span className="notice-icon" aria-hidden="true">
-              {n.type === 'success' && <Check className="size-3.5" />}
-              {n.type === 'error' && <AlertTriangle className="size-3.5" />}
-              {n.type === 'info' && <Info className="size-3.5" />}
-            </span>
-            <span className="notice-message">{n.message}</span>
-            <button className="notice-close" onClick={() => dismiss(n.id)} aria-label="Close">
-              ×
-            </button>
-          </div>
-        ))}
+      {/* Pop-up notices, top-right. aria-live makes screen readers read them
+          out without moving the keyboard focus. */}
+      <div
+        className="fixed top-4 right-4 z-[1000] flex w-[min(360px,calc(100vw-2rem))] flex-col gap-2"
+        aria-live="polite"
+      >
+        {notices.map((n) => {
+          const { strip, icon, Icon } = NOTICE_STYLE[n.type];
+          return (
+            <div
+              key={n.id}
+              className={cn(
+                'flex items-start gap-3 rounded-md border border-l-4 border-gray-200 bg-white p-3 pl-3.5 text-sm text-ink shadow-lg',
+                'animate-notice-in',
+                strip
+              )}
+              role={n.type === 'error' ? 'alert' : 'status'}
+            >
+              <span
+                className={cn('inline-flex size-5 flex-none items-center justify-center rounded-full', icon)}
+                aria-hidden="true"
+              >
+                <Icon className="size-3.5" />
+              </span>
+              <span className="flex-1 leading-snug">{n.message}</span>
+              <button
+                type="button"
+                className="-m-1 flex-none rounded-sm p-1 text-ink-subtle transition-colors hover:bg-subtle hover:text-ink"
+                onClick={() => dismiss(n.id)}
+                aria-label="Dismiss notification"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          );
+        })}
       </div>
 
+      {/* "Are you sure?" window. Clicking the dark backdrop counts as Cancel. */}
       {pendingConfirm && (
-        <div className="confirm-overlay" onMouseDown={() => closeConfirm(false)}>
+        <div
+          className="fixed inset-0 z-[1001] flex items-center justify-center bg-black/45 p-4"
+          onMouseDown={() => closeConfirm(false)}
+        >
           <div
-            className="confirm-dialog"
-            role="dialog"
+            className="w-full max-w-sm rounded-lg bg-white p-6 text-ink shadow-xl"
+            role="alertdialog"
             aria-modal="true"
             aria-labelledby="confirm-title"
+            aria-describedby="confirm-message"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <h3 id="confirm-title">{pendingConfirm.title ?? 'Please confirm'}</h3>
-            <p>{pendingConfirm.message}</p>
-            <div className="confirm-actions">
-              <button className="btn-secondary" onClick={() => closeConfirm(false)}>
+            <h3 id="confirm-title" className="text-lg font-bold">
+              {pendingConfirm.title ?? 'Please confirm'}
+            </h3>
+            <p id="confirm-message" className="mt-2 text-sm leading-relaxed text-ink-muted">
+              {pendingConfirm.message}
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              {/* For risky actions, Cancel gets the focus so pressing Enter is the safe choice. */}
+              <Button variant="outline" onClick={() => closeConfirm(false)} autoFocus={pendingConfirm.danger}>
                 {pendingConfirm.cancelLabel ?? 'Cancel'}
-              </button>
-              <button className="btn-primary" onClick={() => closeConfirm(true)} autoFocus>
+              </Button>
+              <Button
+                variant={pendingConfirm.danger ? 'destructive' : 'default'}
+                onClick={() => closeConfirm(true)}
+                autoFocus={!pendingConfirm.danger}
+              >
                 {pendingConfirm.confirmLabel ?? 'Confirm'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

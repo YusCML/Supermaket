@@ -4,6 +4,7 @@ import '@fontsource/poppins/400.css';
 import '@fontsource/poppins/500.css';
 import '@fontsource/poppins/600.css';
 import '@fontsource/poppins/700.css';
+import '@fontsource/poppins/800.css'; // font-extrabold (big totals and headings)
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotifyProvider } from './contexts/NotifyContext';

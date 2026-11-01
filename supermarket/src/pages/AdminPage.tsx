@@ -4,8 +4,8 @@ import POS from '../components/POS';
 import Inventory from '../components/Inventory';
 import Loyalty from '../components/Loyalty';
 import UserRoles from '../components/UserRoles';
-import Navbar, { type NavTab } from '../components/Navbar';
-import AppHeader from '../components/AppHeader';
+import AppShell, { type NavTab } from '../components/AppShell';
+import LoadingPanel from '../components/LoadingPanel';
 import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotify } from '../contexts/NotifyContext';
@@ -167,16 +167,9 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#F5F5F5] font-sans antialiased text-[#333333] selection:bg-[#2E7D32]/15 selection:text-[#2E7D32]">
-      <AppHeader role="admin" />
-
-      <Navbar tabs={ADMIN_TABS} activeTab={activeTab} setActiveTab={setActiveTab} />
-
-      <main className="flex-1 p-6">
+    <AppShell role="admin" tabs={ADMIN_TABS} activeTab={activeTab} onTabChange={setActiveTab}>
         {loading ? (
-          <div className="flex items-center justify-center rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-12 text-center text-xs font-semibold text-[#333333]/60 shadow-xs">
-            Loading store data…
-          </div>
+          <LoadingPanel message="Loading store data…" />
         ) : (
           <>
             {activeTab === 'pos' && (
@@ -210,11 +203,7 @@ export default function AdminPage() {
             )}
             {activeTab === 'analytics' && (
               <Suspense
-                fallback={
-                  <div className="flex items-center justify-center rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-12 text-center text-xs font-semibold text-[#333333]/60 shadow-xs">
-                    Loading analytics…
-                  </div>
-                }
+                fallback={<LoadingPanel message="Loading analytics…" />}
               >
                 <Analytics
                   analytics={analytics}
@@ -233,7 +222,6 @@ export default function AdminPage() {
             )}
           </>
         )}
-      </main>
-    </div>
+    </AppShell>
   );
 }

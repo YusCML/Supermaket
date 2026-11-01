@@ -46,6 +46,27 @@ export function sellableBatches(batches: ProductBatch[]): ProductBatch[] {
     });
 }
 
+// The expiry date written out, plus how far away it is:
+//   "Nov 5, 2026 · in 4 days", "Oct 30, 2026 · 2 days ago", "No expiry date".
+// Used in dropdowns and tables where both the date and the countdown help.
+export function describeExpiry(expiryDate: string | null): string {
+  if (!expiryDate) return 'No expiry date';
+  const [year, month, day] = expiryDate.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day)).toLocaleDateString('en-PH', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+  const days = daysUntilExpiry(expiryDate);
+  const when =
+    days === 0 ? 'today'
+    : days === 1 ? 'tomorrow'
+    : days > 1 ? `in ${days} days`
+    : `${Math.abs(days)} day${days === -1 ? '' : 's'} ago`;
+  return `${date} · ${when}`;
+}
+
 // A friendly label: "Expires tomorrow", "Expires in 3 days", "Expired 2 days ago"...
 export function formatExpiry(expiryDate: string | null) {
   if (!expiryDate) return 'No expiry date';

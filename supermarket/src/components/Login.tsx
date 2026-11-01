@@ -3,6 +3,10 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { loginSchema, signupSchema } from '../lib/validation';
+import { cn } from '@/lib/utils';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Field } from './ui/field';
 
 type Mode = 'signin' | 'signup';
 
@@ -104,54 +108,49 @@ export default function Login() {
     }
   };
 
-  const inputClass = (field: keyof FieldErrors) =>
-    `w-full rounded-lg border bg-[#FFFFFF] px-3.5 py-2.5 text-sm text-[#333333] placeholder-[#333333]/40 outline-none transition-all focus:ring-2 disabled:bg-gray-100 disabled:cursor-not-allowed ${
-      fieldErrors[field]
-        ? 'border-red-500 focus:ring-red-500/20'
-        : 'border-gray-300 focus:border-[#2E7D32] focus:ring-[#2E7D32]/20'
-    }`;
+  // Links an input to its error message (if any), so screen readers read the
+  // error out when the field is focused.
+  const errorProps = (field: keyof FieldErrors, id: string) =>
+    fieldErrors[field] ? { 'aria-invalid': true, 'aria-describedby': `${id}-error` } : {};
+
+  // The two "Sign in" / "Create account" switch buttons share this look.
+  const modeTabClass = (tab: Mode) =>
+    cn(
+      'flex-1 rounded-full py-2 text-sm font-semibold transition-colors',
+      mode === tab ? 'bg-brand text-white shadow-sm' : 'text-ink-muted hover:text-ink'
+    );
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F5F5F5] px-4 py-12 font-sans antialiased selection:bg-[#2E7D32]/15 selection:text-[#2E7D32]">
-      <div className="w-full max-w-md rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-8 shadow-sm">
-        
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-12">
+      <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
         {/* Back to homepage link */}
-        <div className="mb-6 -mt-2">
+        <div className="-mt-2 mb-6">
           <Link
             to="/"
-            className="inline-flex items-center gap-1 text-xs font-semibold text-[#333333]/50 hover:text-[#2E7D32] transition-colors"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-ink-muted transition-colors hover:text-brand-strong"
           >
-            <ArrowLeft className="size-3.5" />
+            <ArrowLeft className="size-3.5" aria-hidden="true" />
             Back to homepage
           </Link>
         </div>
 
         {/* Header */}
         <div className="text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#F5F5F5]">
-            <img 
-              src="/sp%20logo.jpg" 
-              alt="SuperMarket Express Logo" 
-              className="h-8 w-auto object-contain" 
-            />
-          </div>
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-[#333333]">
-            SuperMarket Express
+          <img src="/logo.svg" alt="" className="mx-auto size-14" />
+          <h1 className="mt-3 text-2xl font-bold tracking-tight text-ink">
+            SuperMarket <span className="text-brand-strong">Express</span>
           </h1>
-          <p className="mt-2 text-xs leading-relaxed text-[#333333]/70">
+          <p className="mt-1 text-sm text-ink-muted">
             {mode === 'signup' ? 'Create your account' : 'Sign in to continue'}
           </p>
         </div>
 
-        {/* Mode Switcher Tabs */}
-        <div className="mt-6 flex rounded-lg bg-[#F5F5F5] p-1 border border-gray-200/80">
+        {/* Sign in / Create account switch. aria-pressed tells screen readers which one is on. */}
+        <div className="mt-6 flex rounded-full border border-gray-200 bg-subtle p-1">
           <button
             type="button"
-            className={`flex-1 rounded-md py-2 text-xs font-semibold transition-all ${
-              mode === 'signin'
-                ? 'bg-[#FFFFFF] text-[#2E7D32] shadow-sm'
-                : 'text-[#333333]/70 hover:text-[#333333]'
-            }`}
+            className={modeTabClass('signin')}
+            aria-pressed={mode === 'signin'}
             onClick={() => switchMode('signin')}
             disabled={loading}
           >
@@ -159,11 +158,8 @@ export default function Login() {
           </button>
           <button
             type="button"
-            className={`flex-1 rounded-md py-2 text-xs font-semibold transition-all ${
-              mode === 'signup'
-                ? 'bg-[#FFFFFF] text-[#2E7D32] shadow-sm'
-                : 'text-[#333333]/70 hover:text-[#333333]'
-            }`}
+            className={modeTabClass('signup')}
+            aria-pressed={mode === 'signup'}
             onClick={() => switchMode('signup')}
             disabled={loading}
           >
@@ -171,25 +167,20 @@ export default function Login() {
           </button>
         </div>
 
-        {/* Banners */}
+        {/* Messages. role="alert" makes screen readers announce the error straight away. */}
         {formError && (
-          <div className="mt-4 rounded-lg bg-red-50 p-3 text-xs font-medium text-red-600 border border-red-200">
+          <div role="alert" className="mt-4 rounded-md border border-danger/30 bg-danger/10 p-3 text-sm font-medium text-danger-strong">
             {formError}
           </div>
         )}
         {notice && (
-          <div className="mt-4 rounded-lg bg-[#2E7D32]/10 p-3 text-xs font-medium text-[#2E7D32] border border-[#2E7D32]/20">
+          <div role="status" className="mt-4 rounded-md border border-brand/20 bg-brand/10 p-3 text-sm font-medium text-brand-strong">
             {notice}
           </div>
         )}
 
-        {/* Google OAuth Button */}
-        <button
-          type="button"
-          className="mt-6 flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-[#FFFFFF] px-4 py-2.5 text-sm font-semibold text-[#333333] shadow-sm hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          onClick={handleGoogle}
-          disabled={loading}
-        >
+        {/* Google sign-in */}
+        <Button variant="outline" size="lg" className="mt-6 w-full gap-3" onClick={handleGoogle} disabled={loading}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
             <path fill="#4285F4" d="M17.64 9.2045c0-.6381-.0573-1.2518-.1636-1.8409H9v3.4818h4.8436c-.2086 1.125-.8427 2.0781-1.7963 2.7163v2.2581h2.9086c1.7026-1.5677 2.6841-3.8745 2.6841-6.6153z" />
             <path fill="#34A853" d="M9 18c2.43 0 4.4673-.8063 5.9563-2.1805l-2.9086-2.2581c-.8063.54-1.8368.8586-3.0477.8586-2.3445 0-4.3286-1.5827-5.0368-3.7104H.9573v2.3318C2.4381 15.9831 5.4818 18 9 18z" />
@@ -197,99 +188,68 @@ export default function Login() {
             <path fill="#EA4335" d="M9 3.5818c1.3213 0 2.5077.4541 3.4405 1.3459l2.5813-2.5813C13.4631.8909 11.4254 0 9 0 5.4818 0 2.4381 2.0168.9573 4.9582L3.9632 7.29C4.6714 5.1622 6.6555 3.5818 9 3.5818z" />
           </svg>
           {loading ? 'Please wait…' : 'Continue with Google'}
-        </button>
+        </Button>
 
         {/* Divider */}
         <div className="relative my-6 text-center">
-          <div className="absolute inset-0 flex items-center">
+          <div className="absolute inset-0 flex items-center" aria-hidden="true">
             <div className="w-full border-t border-gray-200" />
           </div>
-          <span className="relative bg-[#FFFFFF] px-3 text-xs uppercase tracking-wider text-[#333333]/50">
-            or
-          </span>
+          <span className="relative bg-white px-3 text-xs tracking-wider text-ink-muted uppercase">or</span>
         </div>
 
-        {/* Credentials Form */}
-        <form
-          className="space-y-4"
-          noValidate
-          onSubmit={mode === 'signup' ? handleSignUp : handleSignIn}
-        >
-          <div>
-            <label className="block text-xs font-semibold text-[#333333] mb-1.5" htmlFor="auth-email">
-              Email
-            </label>
-            <input
+        {/* Email + password */}
+        <form className="space-y-4" noValidate onSubmit={mode === 'signup' ? handleSignUp : handleSignIn}>
+          <Field label="Email" htmlFor="auth-email" error={fieldErrors.email}>
+            <Input
               id="auth-email"
-              className={inputClass('email')}
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
               placeholder="you@example.com"
               disabled={loading}
+              {...errorProps('email', 'auth-email')}
             />
-            {fieldErrors.email && (
-              <span className="mt-1 block text-xs font-medium text-red-500">
-                {fieldErrors.email}
-              </span>
-            )}
-          </div>
+          </Field>
 
-          <div>
-            <label className="block text-xs font-semibold text-[#333333] mb-1.5" htmlFor="auth-password">
-              Password
-            </label>
-            <input
+          <Field
+            label="Password"
+            htmlFor="auth-password"
+            error={fieldErrors.password}
+            hint={mode === 'signup' ? 'At least 8 characters.' : undefined}
+          >
+            <Input
               id="auth-password"
-              className={inputClass('password')}
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-              placeholder={mode === 'signup' ? 'At least 8 characters' : ''}
               disabled={loading}
+              {...errorProps('password', 'auth-password')}
             />
-            {fieldErrors.password && (
-              <span className="mt-1 block text-xs font-medium text-red-500">
-                {fieldErrors.password}
-              </span>
-            )}
-          </div>
+          </Field>
 
           {mode === 'signup' && (
-            <div>
-              <label className="block text-xs font-semibold text-[#333333] mb-1.5" htmlFor="auth-confirm">
-                Confirm password
-              </label>
-              <input
+            <Field label="Confirm password" htmlFor="auth-confirm" error={fieldErrors.confirmPassword}>
+              <Input
                 id="auth-confirm"
-                className={inputClass('confirmPassword')}
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 autoComplete="new-password"
                 disabled={loading}
+                {...errorProps('confirmPassword', 'auth-confirm')}
               />
-              {fieldErrors.confirmPassword && (
-                <span className="mt-1 block text-xs font-medium text-red-500">
-                  {fieldErrors.confirmPassword}
-                </span>
-              )}
-            </div>
+            </Field>
           )}
 
-          <button
-            type="submit"
-            className="w-full rounded-lg bg-[#2E7D32] px-4 py-2.5 text-sm font-semibold text-[#FFFFFF] shadow-md hover:bg-[#246628] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={loading}
-          >
+          <Button type="submit" size="lg" className="w-full" disabled={loading}>
             {loading ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Sign in'}
-          </button>
+          </Button>
         </form>
 
-        {/* Footer */}
-        <p className="mt-6 text-center text-xs text-[#333333]/60">
+        <p className="mt-6 text-center text-xs text-ink-muted">
           {mode === 'signup'
             ? 'Confirm your email address to activate your account.'
             : 'Use your Google account or an email address.'}

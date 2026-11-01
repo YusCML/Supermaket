@@ -9,6 +9,8 @@
   stock_quantity: number;
   reorder_level: number;
   image_url?: string | null;
+  // Short text shown under the product on the POS menu. Optional.
+  description?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -71,6 +73,27 @@ export interface TopProductPoint {
   quantity: number;
 }
 
+// Money in and money lost for one period (a day, week or month). Worked out by
+// profit_and_loss_between() in
+// supabase/migrations/20261101120000_profit_and_loss_analytics.sql.
+export interface ProfitLossTotals {
+  orders: number;
+  revenue: number;              // money actually taken in (after near-expiry markdowns and points)
+  cost_of_goods: number;        // what the sold items cost the store
+  gross_profit: number;         // revenue - cost_of_goods
+  near_expiry_discount: number; // given away by the 15% near-expiry markdown
+  points_discount: number;      // paid for with loyalty points
+  expired_loss: number;         // stock thrown out because it expired (at cost)
+  spoiled_loss: number;         // written off as spoiled (at cost)
+  damaged_loss: number;         // written off as damaged (at cost)
+  total_losses: number;         // expired + spoiled + damaged
+  net_profit: number;           // gross_profit - total_losses
+}
+
+export interface ProfitLossPeriod extends ProfitLossTotals {
+  start: string; // first day of the period, 'YYYY-MM-DD'
+}
+
 export interface SalesAnalytics {
   today_revenue: number;
   week_revenue: number;
@@ -82,6 +105,11 @@ export interface SalesAnalytics {
   payment_mix: PaymentMixPoint[];
   top_products: TopProductPoint[];
   spoilage_losses: number;
+  // Optional: only there once the 20261101120000 migration has been applied.
+  daily_breakdown?: ProfitLossPeriod[];   // last 30 days
+  weekly_breakdown?: ProfitLossPeriod[];  // last 12 weeks
+  monthly_breakdown?: ProfitLossPeriod[]; // last 12 months
+  year_summary?: ProfitLossTotals;        // this year so far
 }
 
 export type AppRole = 'admin' | 'cashier' | 'customer';
@@ -174,6 +202,7 @@ export interface NewProductInput {
   stock_quantity: number;
   reorder_level: number;
   image_url?: string | null;
+  description?: string | null;
 }
 
 export interface UpdateProductInput {
@@ -184,4 +213,5 @@ export interface UpdateProductInput {
   cost: number;
   reorder_level: number;
   image_url?: string | null;
+  description?: string | null;
 }

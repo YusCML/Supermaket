@@ -77,8 +77,17 @@ export function useStoreData(role: AppRole) {
   // inventory summary gives. If that summary isn't available (e.g. the
   // database hasn't been updated yet), fall back to the plain product list.
   // The database still double-checks stock when the sale is saved.
+  //
+  // The inventory summary doesn't include every product field, so the
+  // description (and the picture, just in case) are copied over from the
+  // full product list.
+  const productById = new Map(products.map((product) => [product.id, product]));
   const posProducts: ProductInventorySummary[] = inventory.length > 0
-    ? inventory
+    ? inventory.map((row) => ({
+        ...row,
+        description: productById.get(row.id)?.description ?? null,
+        image_url: row.image_url ?? productById.get(row.id)?.image_url ?? null,
+      }))
     : products.map((product) => ({
         ...product,
         available_quantity: product.stock_quantity,
