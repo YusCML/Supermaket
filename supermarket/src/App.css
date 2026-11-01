@@ -2,9 +2,16 @@
   Most styling now lives in the components themselves (Tailwind classes) and
   in the colour tokens in index.css. This file only keeps the few rules that
   can't be written as Tailwind classes.
+
+  It is loaded by main.tsx, so it applies to every page. (CashierPage.tsx and
+  AdminPage.tsx import it again; that's harmless, the build includes it once.)
+  The class names below are ordinary CSS classes that the components put on
+  their elements, e.g. className="barcode-image".
 */
 
 /* ── Barcodes (drawn by BarcodeImage.tsx) ─────────────────────────────── */
+/* The barcode picture: never wider than its box, and it shrinks evenly
+   (height: auto keeps its shape) instead of being squashed. */
 .barcode-image {
   display: block;
   max-width: 100%;
@@ -20,19 +27,28 @@
 }
 
 /* ── Printing a receipt ───────────────────────────────────────────────── */
-/* When the cashier clicks "Print receipt", hide everything on the page except
-   the receipt (Receipt.tsx marks it with these two class names), and place it
-   at the top-left of the paper. */
+/* When the cashier clicks "Print" on the receipt, only the receipt comes out,
+   at the width of a till receipt (80 mm), centred at the top of the paper.
+   Receipt.tsx draws the receipt OUTSIDE the app's #root element (a portal
+   into <body>), so the whole app can simply be switched off while printing.
+   That also means no blank second page from the app's own height. */
+/* @media print: these rules only apply while printing, never on screen. */
 @media print {
-  body * {
-    visibility: hidden !important;
+  /* No page margins: this also stops the browser printing its own header and
+     footer (date, page title, web address, page numbers) around the receipt. */
+  @page {
+    margin: 0;
   }
 
-  .receipt-print-root,
-  .receipt-print-root * {
-    visibility: visible !important;
+  /* The whole app, behind the receipt pop-up. */
+  #root {
+    display: none !important;
   }
 
+  /* The dark full-screen layer around the receipt pop-up. On paper it
+     becomes an ordinary block with no padding and no grey background.
+     !important is needed to beat the Tailwind classes on that element
+     (fixed, p-4, bg-black/50 in Receipt.tsx). */
   .receipt-print-overlay {
     position: static !important;
     display: block !important;
@@ -40,12 +56,20 @@
     background: transparent !important;
   }
 
+  /* The receipt itself: 80 mm wide, centred, 8 mm from the top, with no
+     height limit, scrollbar, rounded corners or shadow. */
   .receipt-print-root {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
+    width: 80mm !important;
+    max-width: none !important;
     max-height: none !important;
+    margin: 8mm auto 0 !important;
+    overflow: visible !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* The box that scrolls a long receipt on screen: on paper, show it all. */
+  .receipt-print-scroll {
     overflow: visible !important;
   }
 }

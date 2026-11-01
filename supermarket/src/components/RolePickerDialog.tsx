@@ -1,3 +1,13 @@
+// RolePickerDialog.tsx: the "How would you like to continue?" pop-up, with
+// one button per role the signed-in person holds.
+//
+// Used in two places:
+//   - RolePickerPage (/app), right after signing in. It can't be closed there.
+//   - AccountMenu's "Switch role", on any signed-in page. It can be closed.
+//
+// The roles come from AuthContext (useAuth()); each role's label,
+// description and page address come from ROLE_INFO in lib/roles.ts, and its
+// icon from ui/roleIcons.tsx. The window itself is the shared ui/dialog.
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
@@ -8,8 +18,12 @@ import { cn } from '@/lib/utils';
 import type { AppRole } from '../types/app';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 
+// The props (inputs) the parent passes in.
 interface RolePickerDialogProps {
+  // true = the pop-up is showing. The parent owns this value.
   open: boolean;
+  // Called with true/false when the pop-up wants to open or close
+  // (Escape, ×, clicking outside, or picking a role).
   onOpenChange: (open: boolean) => void;
   // The role being used right now (marked "Current"). Not set right after login.
   currentRole?: AppRole;
@@ -31,8 +45,13 @@ export default function RolePickerDialog({
   footer,
 }: RolePickerDialogProps) {
   const { user, availableRoles } = useAuth();
+  // useNavigate() (React Router) gives a function that changes the page
+  // address from code.
   const navigate = useNavigate();
 
+  // A role button was clicked: close the pop-up, then go to that role's page
+  // (ROLE_INFO[role].home, e.g. '/cashier'). Picking the role already in use
+  // just closes it, since we're already on that page.
   const pick = (role: AppRole) => {
     onOpenChange(false);
     if (role !== currentRole) navigate(ROLE_INFO[role].home);
@@ -46,7 +65,9 @@ export default function RolePickerDialog({
         if (dismissible || next) onOpenChange(next);
       }}
     >
+      {/* No × button when the window must stay open. */}
       <DialogContent showCloseButton={dismissible}>
+        {/* Header: "Welcome back" after sign-in, "Switch role" from the menu */}
         <DialogHeader>
           <DialogTitle>{dismissible ? 'Switch role' : 'Welcome back'}</DialogTitle>
           <DialogDescription>
@@ -55,8 +76,13 @@ export default function RolePickerDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {/* One button per role, always in the order customer, cashier, admin.
+            `group` on the button plus `group-hover:` on things inside it
+            means: when the mouse is over the BUTTON, those inner parts change
+            colour too. */}
         <div className="space-y-2">
           {availableRoles.map((role) => {
+            // A component, so it's capitalised and used as <Icon />.
             const Icon = roleIcon(role);
             const isCurrent = role === currentRole;
             return (
@@ -87,6 +113,8 @@ export default function RolePickerDialog({
           })}
         </div>
 
+        {/* Optional footer. On screens 640px or wider (sm:) its items sit at
+            opposite ends; on phones they stack. */}
         {footer && <DialogFooter className="sm:justify-between">{footer}</DialogFooter>}
       </DialogContent>
     </Dialog>

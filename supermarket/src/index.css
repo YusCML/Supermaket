@@ -1,3 +1,16 @@
+/*
+  index.css: the global stylesheet, loaded once by main.tsx for the whole app.
+
+  In order:
+    1. @import "tailwindcss" pulls in Tailwind: a small CSS reset plus every
+       utility class (px-4, text-sm, bg-white...). A "utility class" is a tiny
+       class that does one thing. Tailwind looks through our .tsx files and
+       only builds the classes we actually use.
+    2. @theme: the design tokens (colours, font, corner sizes, animations).
+    3. @layer base: plain-CSS defaults for the page (background, text colour,
+       text selection, keyboard focus ring, hand cursor).
+    4. Almost no animation for people who asked their OS to reduce motion.
+*/
 @import "tailwindcss";
 
 /*
@@ -6,9 +19,18 @@
   say `bg-brand` or `text-ink-muted` instead of repeating hex codes like
   `bg-[#2E7D32]` or `text-[#333333]/70`. Change a value here and the whole app
   follows.
+
+  How it works (Tailwind v4): each variable inside @theme turns into classes.
+    --color-brand       ->  bg-brand, text-brand, border-brand, ring-brand...
+    --radius-lg         ->  rounded-lg
+    --animate-notice-in ->  animate-notice-in
+  A "/number" after a colour class sets its opacity: bg-brand/10 is the brand
+  green at 10%, i.e. a very light see-through green.
 */
 @theme {
   /* ── Font ──────────────────────────────────────────────── */
+  /* The default font for all text. Poppins is loaded in main.tsx; the names
+     after it are fallbacks used only if Poppins fails to load. */
   --font-sans: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
   /* ── The store palette ─────────────────────────────────────
@@ -26,6 +48,9 @@
   --color-brand-hover: #00732F;
   --color-brand-strong: #006B31; /* green text on white, canvas and light-green tints (6.6:1) */
   --color-brand-ink: #14290B;    /* dark text placed ON yellow or amber (12:1 / 7.8:1) */
+  /* An 8-digit hex colour: the last two digits (1F) are the opacity, about
+     12%, so this is a see-through green. No component uses bg-brand-soft at
+     the moment; they write bg-brand/10 and similar instead. */
   --color-brand-soft: #00873E1F;
 
   /* Yellow: deals (15% off), information notes, highlights */
@@ -57,6 +82,12 @@
   --color-subtle: #F3F5F1;  /* light grey fills inside components */
 
   /* ── Semantic tokens consumed by the shadcn components ─── */
+  /* shadcn/ui is a collection of ready-made components that were copied into
+     components/ui. Some of them expect these generic names (bg-card,
+     text-muted-foreground...). The values simply repeat the store colours
+     above. Nothing in the app uses them right now (it uses the store names:
+     brand, ink, subtle...); they are kept so components added later with
+     the shadcn tool (npx shadcn add ...) look right straight away. */
   --color-primary: #00873E;
   --color-primary-foreground: #FFFFFF;
   --color-secondary: #F3F5F1;
@@ -86,7 +117,9 @@
          rounded-sm  4px  small pieces inside other things
          rounded-md  6px  image boxes, little panels
          rounded-lg  8px  cards, tables, pop-up windows
-     Status labels are never boxed or pill-shaped: they're plain coloured text. */
+     Status labels are never boxed or pill-shaped: they're plain coloured text.
+     rounded-full and rounded-2xl are Tailwind's own sizes, not set here.
+     --radius-xl (rounded-xl, 10px) is defined too but isn't used anywhere yet. */
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
@@ -94,19 +127,30 @@
 
   /* ── Animations ────────────────────────────────────────── */
   /* `animate-notice-in`: pop-up notices slide down a few pixels as they appear. */
+  /* (Used by the notices in contexts/NotifyContext.tsx. The value means: play
+     the "notice-in" keyframes below over 180 milliseconds, slowing at the end.) */
   --animate-notice-in: notice-in 180ms ease-out;
 
+  /* The animation's start and end: from invisible and 6px higher, to fully
+     visible in its normal place. The browser fills in the frames between. */
   @keyframes notice-in {
     from { opacity: 0; transform: translateY(-6px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 }
 
+/* Rules in the "base" layer are defaults. Any Tailwind class written on an
+   element wins over them, so a component can always override these. */
 @layer base {
+  /* Tells the browser the app is light-themed, so its own built-in parts
+     (scrollbars, date pickers, checkboxes) are drawn in light colours too,
+     even if the computer is set to dark mode. */
   :root {
     color-scheme: light;
   }
 
+  /* Page background, text colour and font for everything. The font smoothing
+     line makes text look slightly crisper on Macs. */
   body {
     background: var(--color-canvas);
     color: var(--color-ink);
@@ -139,9 +183,35 @@
   input[type='radio']:not(:disabled) {
     cursor: pointer;
   }
+
+  /* No browser-drawn extras inside our boxes, so every box looks the same
+     in every browser:
+       - number boxes: hide the tiny up/down arrows ("spinners"). Chrome,
+         Edge and Safari draw them with the -webkit- parts; Firefox hides
+         them with appearance: textfield. Typing and the arrow keys still work.
+       - search boxes: hide the browser's own "×" clear button.
+     (Dates use our own calendar, ui/date-picker.tsx, and browser suggestion
+     lists are switched off in ui/input.tsx.) */
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+  input[type='search']::-webkit-search-cancel-button,
+  input[type='search']::-webkit-search-decoration {
+    -webkit-appearance: none;
+  }
 }
 
 /* People who turn on "reduce motion" in their OS get (almost) no animations. */
+/* The durations are set to a tiny 0.01ms rather than removed, so anything
+   that waits for an animation to finish (a pop-up fading out before it is
+   removed, for example) still gets its "finished" signal straight away.
+   !important makes these win over every class in the app. */
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,

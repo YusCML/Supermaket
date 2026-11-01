@@ -1,32 +1,78 @@
+// LoginDialog.tsx: the sign-in / create-account pop-up.
+//
+// LandingPage shows it when the address is /login (see App.tsx). It never
+// changes the address itself: closing it calls onOpenChange(false), and
+// LandingPage then goes back to "/".
+//
+// Three ways in:
+//   - "Continue with Google": Supabase sends the browser to Google and back.
+//   - Sign in with email + password.
+//   - Create account with email + password + confirm password.
+// What's typed is checked with the zod rules in lib/validation.ts
+// (loginSchema / signupSchema) before anything is sent. The actual sign-in
+// functions come from AuthContext through useAuth(). When sign-in works,
+// AuthContext notices the new user and LandingPage moves them on to /app.
+//
+// Built from the shared pieces in components/ui: Dialog (the pop-up window,
+// from Base UI), Button, Input and Field (label + box + error message).
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { loginSchema, signupSchema } from '../lib/validation';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Field } from './ui/field';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 
+// Which of the two forms is showing. A "union type": the value must be
+// exactly one of these two strings.
 type Mode = 'signin' | 'signup';
 
+// One error message per box, e.g. { email: 'Enter a valid email address' }.
+// Record<keys, string> = an object with those keys and string values;
+// Partial<...> makes every key optional, since usually only some boxes are wrong.
 type FieldErrors = Partial<
   Record<'email' | 'password' | 'confirmPassword', string>
 >;
 
-export default function Login() {
+// The props (inputs) LandingPage passes in. The parent decides whether the
+// pop-up is open; this component only reports when the user closes it.
+interface LoginDialogProps {
+  // true = the pop-up is showing.
+  open: boolean;
+  // Called with false when the user closes it (Escape, the × button, or a
+  // click outside the window).
+  onOpenChange: (open: boolean) => void;
+}
+
+// The sign-in / create-account form, shown as a pop-up over the landing page
+// (the same way the role picker pops up). LandingPage opens it at /login.
+export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
   const { signInWithGoogle, signUp, signInWithEmail } = useAuth();
 
+  // useState gives the component a value it remembers between redraws, plus a
+  // function to change it. Calling that function redraws the pop-up.
+
+  // Which form is showing. Starts on "Sign in".
   const [mode, setMode] = useState<Mode>('signin');
+  // What's typed in each box. Each <Input> shows its value and updates it on
+  // every key press (a "controlled input": React state is the source of truth).
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
+  // Red messages under individual boxes (from the zod checks).
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  // One red message at the top, for errors from Supabase (e.g. wrong password).
   const [formError, setFormError] = useState('');
+  // One green message at the top (e.g. "Check your inbox...").
   const [notice, setNotice] = useState('');
+  // true while waiting for Supabase. Every button and box is disabled until it
+  // answers, so nobody can submit twice.
   const [loading, setLoading] = useState(false);
 
+  // Switches between "Sign in" and "Create account". Old messages are cleared
+  // because they belonged to the other form; what was typed is kept.
   function switchMode(next: Mode) {
     setMode(next);
     setFieldErrors({});
@@ -34,6 +80,10 @@ export default function Login() {
     setNotice('');
   }
 
+  // "Continue with Google". When it works, the browser leaves this page for
+  // Google's sign-in page and later comes back to the home page ("/"), signed
+  // in (see signInWithGoogle in AuthContext). That's why `loading` is only
+  // switched off when it fails: on success the page is being left anyway.
   const handleGoogle = async () => {
     setFormError('');
     setLoading(true);
@@ -45,12 +95,19 @@ export default function Login() {
     }
   };
 
+  // Runs when the "Sign in" form is submitted (button click or Enter).
   const handleSignIn = async (e: FormEvent) => {
+    // Stop the browser's normal form submit, which would reload the page.
     e.preventDefault();
     setFormError('');
     setNotice('');
     setFieldErrors({});
 
+    // Check the boxes first. safeParse never throws: it returns either
+    // { success: true, data } or { success: false, error } with a list of
+    // problems ("issues"). Each issue's path[0] names its box ('email',
+    // 'password'), and only the first message per box is kept.
+    // (The typeof check is because zod allows paths that aren't strings.)
     const result = loginSchema.safeParse({ email, password });
     if (!result.success) {
       const next: FieldErrors = {};
@@ -62,6 +119,10 @@ export default function Login() {
       return;
     }
 
+    // All good: ask Supabase. result.data is the cleaned-up input (the email
+    // trimmed and in lower case). On success there's nothing more to do here:
+    // AuthContext picks up the new user and LandingPage takes them to /app.
+    // `finally` runs whether it worked or failed.
     setLoading(true);
     try {
       await signInWithEmail(result.data);
@@ -72,12 +133,16 @@ export default function Login() {
     }
   };
 
+  // Runs when the "Create account" form is submitted. Same pattern as above.
   const handleSignUp = async (e: FormEvent) => {
     e.preventDefault();
     setFormError('');
     setNotice('');
     setFieldErrors({});
 
+    // signupSchema also checks the password length and that both passwords
+    // match. The "do not match" message belongs to confirmPassword (path:
+    // ['confirmPassword'] in validation.ts), so it shows under that box.
     const result = signupSchema.safeParse({ email, password, confirmPassword });
     if (!result.success) {
       const next: FieldErrors = {};
@@ -91,6 +156,10 @@ export default function Login() {
 
     setLoading(true);
     try {
+      // When Supabase requires email confirmation, signUp returns no session:
+      // the account exists but can't be used until the link in the email is
+      // clicked. So we say so and clear the passwords. If a session DOES come
+      // back, the person is already signed in and LandingPage moves them on.
       const { session } = await signUp(result.data);
       if (!session) {
         setNotice(
@@ -110,6 +179,10 @@ export default function Login() {
 
   // Links an input to its error message (if any), so screen readers read the
   // error out when the field is focused.
+  // aria-invalid also turns the box red (see ui/input.tsx), and
+  // aria-describedby points at the message's id, which <Field> creates as
+  // `${id}-error`. With no error it returns {}, so spreading it adds nothing.
+  // (ui/field.tsx has the same helper, called invalidProps.)
   const errorProps = (field: keyof FieldErrors, id: string) =>
     fieldErrors[field] ? { 'aria-invalid': true, 'aria-describedby': `${id}-error` } : {};
 
@@ -121,28 +194,25 @@ export default function Login() {
     );
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-12">
-      <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-8 shadow-sm">
-        {/* Back to homepage link */}
-        <div className="-mt-2 mb-6">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1 text-xs font-semibold text-ink-muted transition-colors hover:text-brand-strong"
-          >
-            <ArrowLeft className="size-3.5" aria-hidden="true" />
-            Back to homepage
-          </Link>
-        </div>
-
+    // Escape, the × button or clicking outside closes it (back to the landing page).
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {/* block + gap-0: the form sets its own spacing. overflow-y-auto: scrolls on short screens. */}
+      {/* The cursor starts in the Email box, so people can type straight away. */}
+      <DialogContent
+        className="block gap-0 overflow-y-auto p-8"
+        initialFocus={() => document.getElementById('auth-email')}
+      >
         {/* Header */}
         <div className="text-center">
+          {/* alt="" marks the logo as decoration: the title right under it
+              already says the store's name. */}
           <img src="/logo.svg" alt="" className="mx-auto size-14" />
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-ink">
+          <DialogTitle className="mt-3 text-2xl">
             SuperMarket <span className="text-brand-strong">Express</span>
-          </h1>
-          <p className="mt-1 text-sm text-ink-muted">
+          </DialogTitle>
+          <DialogDescription className="mt-1">
             {mode === 'signup' ? 'Create your account' : 'Sign in to continue'}
-          </p>
+          </DialogDescription>
         </div>
 
         {/* Sign in / Create account switch. aria-pressed tells screen readers which one is on. */}
@@ -173,6 +243,8 @@ export default function Login() {
             {formError}
           </div>
         )}
+        {/* role="status" is the polite version: read out once the screen
+            reader has finished what it's saying. */}
         {notice && (
           <div role="status" className="mt-4 rounded-md border border-brand/20 bg-brand/10 p-3 text-sm font-medium text-brand-strong">
             {notice}
@@ -181,6 +253,7 @@ export default function Login() {
 
         {/* Google sign-in */}
         <Button variant="outline" size="lg" className="mt-6 w-full gap-3" onClick={handleGoogle} disabled={loading}>
+          {/* Google's coloured "G" logo, drawn as four SVG shapes. */}
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
             <path fill="#4285F4" d="M17.64 9.2045c0-.6381-.0573-1.2518-.1636-1.8409H9v3.4818h4.8436c-.2086 1.125-.8427 2.0781-1.7963 2.7163v2.2581h2.9086c1.7026-1.5677 2.6841-3.8745 2.6841-6.6153z" />
             <path fill="#34A853" d="M9 18c2.43 0 4.4673-.8063 5.9563-2.1805l-2.9086-2.2581c-.8063.54-1.8368.8586-3.0477.8586-2.3445 0-4.3286-1.5827-5.0368-3.7104H.9573v2.3318C2.4381 15.9831 5.4818 18 9 18z" />
@@ -191,6 +264,8 @@ export default function Login() {
         </Button>
 
         {/* Divider */}
+        {/* A grey line across the full width, with "or" on a white patch in
+            the middle so the line seems to stop on either side of the word. */}
         <div className="relative my-6 text-center">
           <div className="absolute inset-0 flex items-center" aria-hidden="true">
             <div className="w-full border-t border-gray-200" />
@@ -199,7 +274,13 @@ export default function Login() {
         </div>
 
         {/* Email + password */}
+        {/* One form for both modes; submitting runs the handler for the mode
+            that's showing. noValidate turns off the browser's own pop-up
+            checks (e.g. for type="email"), so our zod messages are the only
+            ones and look the same in every browser. */}
         <form className="space-y-4" noValidate onSubmit={mode === 'signup' ? handleSignUp : handleSignIn}>
+          {/* {...errorProps(...)} "spreads" the returned object onto the box,
+              i.e. adds each of its keys as a prop (here, the aria-* props). */}
           <Field label="Email" htmlFor="auth-email" error={fieldErrors.email}>
             <Input
               id="auth-email"
@@ -213,6 +294,8 @@ export default function Login() {
             />
           </Field>
 
+          {/* autoComplete helps password managers: 'new-password' offers to
+              create a strong one, 'current-password' fills in the saved one. */}
           <Field
             label="Password"
             htmlFor="auth-password"
@@ -230,6 +313,8 @@ export default function Login() {
             />
           </Field>
 
+          {/* Only when creating an account. `condition && <X />` shows X only
+              when the condition is true. */}
           {mode === 'signup' && (
             <Field label="Confirm password" htmlFor="auth-confirm" error={fieldErrors.confirmPassword}>
               <Input
@@ -249,12 +334,13 @@ export default function Login() {
           </Button>
         </form>
 
+        {/* Small hint at the bottom, different for each mode */}
         <p className="mt-6 text-center text-xs text-ink-muted">
           {mode === 'signup'
             ? 'Confirm your email address to activate your account.'
             : 'Use your Google account or an email address.'}
         </p>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

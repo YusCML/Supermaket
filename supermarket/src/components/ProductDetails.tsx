@@ -1,3 +1,21 @@
+// ProductDetails.tsx: the pop-up that opens when you click a product at
+// checkout (on its picture or name in ProductMenu).
+//
+// It shows the picture, barcode, price and stock facts, lets the cashier (or
+// self-serve customer) pick WHICH batch to sell from and HOW MANY to add,
+// then calls onAdd. POS.tsx's onAdd puts that into the basket with
+// addToCart(product, quantity, batch) and closes the pop-up.
+//
+// This component never changes the basket itself. POS owns the basket and
+// passes in just what's needed: how many are already in it (inBasket,
+// inBasketForBatch) and what to do on "Add" (onAdd).
+//
+// React words used here:
+//   props    = the inputs a parent passes in (ProductDetailsProps below).
+//   useState = a value React remembers between redraws; calling its setter
+//              redraws the pop-up with the new value.
+//   useRef   = a box ({ current: … }) React keeps between redraws without
+//              redrawing. Passed as ref={…}, it holds a real page element.
 import { useRef, useState, type ReactNode } from 'react';
 import { CalendarClock, ImageIcon, Minus, Plus, ShoppingBasket, Tag } from 'lucide-react';
 import type { ProductBatch, ProductInventorySummary } from '../types/app';
@@ -10,17 +28,29 @@ import { StatusText } from './ui/status-text';
 import BarcodeImage from './BarcodeImage';
 
 interface ProductDetailsProps {
+  // The product to show, plus its stock and expiry numbers from the
+  // inventory summary (get_product_inventory in the database).
   product: ProductInventorySummary;
+  // This product's batches that can still be sold, soonest expiry first
+  // (POS passes sellableBatches() from lib/expiry). Empty if the product
+  // has no batch records.
   batches: ProductBatch[];
+  // How many of this product are already in the basket (all batches together).
   inBasket: number;
+  // How many units from one particular batch are already in the basket.
   inBasketForBatch: (batchId: number) => number;
+  // "Add" was pressed: add `quantity` units, from `batch` if one was picked.
   onAdd: (quantity: number, batch?: ProductBatch) => void;
+  // The pop-up should close (Escape, ×, or a click outside).
   onClose: () => void;
 }
 
+// Money is always shown with 2 decimals, e.g. ₱12.50.
 const peso = (amount: number) => `₱${amount.toFixed(2)}`;
 
 // One "label: value" line in the facts list.
+// `children` is whatever is written between <Fact> and </Fact> (the value);
+// `className` lets one fact style its value differently (e.g. red text).
 function Fact({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-1.5">
@@ -40,11 +70,18 @@ export default function ProductDetails({
   onAdd,
   onClose,
 }: ProductDetailsProps) {
+  // Units of a batch that are NOT already in the basket, i.e. how many more
+  // can still be taken from it.
   const freeIn = (batch: ProductBatch) => batch.quantity_remaining - inBasketForBatch(batch.id);
 
+  // Which batch card is ticked. It starts on the first batch that still has
+  // free units; since `batches` is in selling order, that's the soonest-
+  // expiring one. (Passing a function to useState means it's worked out only
+  // once, when the pop-up opens, not on every redraw.)
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(
     () => batches.find((b) => freeIn(b) > 0)?.id ?? null
   );
+  // How many to add, as set with the − / + buttons. Starts at 1.
   const [quantity, setQuantity] = useState(1);
   // The "Add" button gets the keyboard focus when the window opens, so
   // pressing Enter straight away adds one to the basket.
@@ -52,16 +89,25 @@ export default function ProductDetails({
 
   const hasBatches = batches.length > 0;
   const selectedBatch = batches.find((b) => b.id === selectedBatchId) ?? null;
+  // Stock of this product that isn't in the basket yet (never below 0).
   const productRoomLeft = Math.max(0, product.stock_quantity - inBasket);
 
+  // The most that can be added right now:
+  //  - with batches: limited by BOTH the product's free stock and the
+  //    chosen batch's free units (0 if no batch is chosen);
+  //  - without batches: just the product's free stock.
   const canAdd = hasBatches
     ? selectedBatch
       ? Math.min(productRoomLeft, freeIn(selectedBatch))
       : 0
     : productRoomLeft;
 
+  // The 15%-off price (lib/pricing.ts). It only applies to units from a batch
+  // that expires within 7 days.
   const salePrice = markedDownPrice(product.price);
   const selectedIsMarkedDown = selectedBatch ? isNearExpiry(selectedBatch.expiry_date) : false;
+  // Show the sale price at the top? With batches: only if the chosen batch is
+  // marked down. Without: if the product has any near-expiry units at all.
   const showSale = hasBatches ? selectedIsMarkedDown : product.near_expiry_count > 0;
 
   // Price of what's about to be added, shown next to the Add button.
@@ -70,22 +116,33 @@ export default function ProductDetails({
   const unitPrice = hasBatches && selectedIsMarkedDown ? salePrice : product.price;
   const addTotal = unitPrice * Math.min(quantity, canAdd);
 
+  // Ticks a batch card. A batch with nothing free can't be picked. The
+  // quantity is squeezed to fit the new batch (at least 1, at most what's
+  // free in that batch and in the product's stock).
   const selectBatch = (batch: ProductBatch) => {
     if (freeIn(batch) <= 0) return;
     setSelectedBatchId(batch.id);
     setQuantity((q) => Math.max(1, Math.min(q, freeIn(batch), productRoomLeft)));
   };
 
+  // The − / + buttons. Keeps the quantity between 1 and canAdd.
   const changeQuantity = (next: number) => {
     setQuantity(Math.max(1, Math.min(next, canAdd)));
   };
 
   return (
     // Escape, the × button and clicking outside all close the window.
+    // `open` is always true here: POS only draws this component while a
+    // product is chosen, and onClose clears that choice, which removes it.
+    // initialFocus={addButtonRef} puts the keyboard focus on "Add" at the start.
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="gap-0 p-0 sm:max-w-2xl" initialFocus={addButtonRef}>
-        {/* ── Header ── */}
+        {/* ── Header ── (pr-14 leaves room for the × close button) */}
+        {/* Brand (small, above), the name, then category and SKU. */}
         <div className="border-b border-gray-100 px-6 pt-6 pb-4 pr-14">
+          {product.brand && (
+            <div className="text-xs font-semibold tracking-wide text-ink-muted uppercase">{product.brand}</div>
+          )}
           <DialogTitle>{product.name}</DialogTitle>
           <DialogDescription className="mt-0.5">
             {[product.category, product.sku && `SKU ${product.sku}`].filter(Boolean).join(' · ')}
@@ -109,7 +166,8 @@ export default function ProductDetails({
             </div>
 
             <div className="space-y-4">
-              {/* Price */}
+              {/* Price: the 15%-off price with the normal one crossed out
+                  and a line saying why, or just the normal price. */}
               <div>
                 {showSale ? (
                   <>
@@ -131,7 +189,13 @@ export default function ProductDetails({
                 )}
               </div>
 
-              {/* Facts */}
+              {/* The product's description (set in Inventory), if it has one. */}
+              {product.description && <p className="text-sm leading-relaxed text-ink-muted">{product.description}</p>}
+
+              {/* Facts. <dl> is HTML's "description list": pairs of a term
+                  (<dt>) and its value (<dd>), built by <Fact> above. Rows
+                  that wouldn't say anything useful (no expired units, no
+                  barcode) are left out. */}
               <dl className="divide-y divide-gray-100 border-y border-gray-100">
                 <Fact label="In stock">
                   {product.stock_quantity}
@@ -163,14 +227,23 @@ export default function ProductDetails({
               <legend className="mb-2 text-sm font-semibold text-ink">Choose the batch to sell from</legend>
               <div className="grid gap-2 sm:grid-cols-2">
                 {batches.map((batch, index) => {
+                  // Units of this batch not yet in the basket.
                   const free = freeIn(batch);
                   const isSelected = batch.id === selectedBatchId;
+                  // Everything in this batch is already in the basket.
                   const isEmpty = free <= 0;
+                  // Days until expiry (null = no expiry date), for the colour.
                   const days = batch.expiry_date ? daysUntilExpiry(batch.expiry_date) : null;
+                  // Expires within 7 days -> sells at 15% off.
                   const markedDown = isNearExpiry(batch.expiry_date);
 
                   return (
                     // The whole card is a <label>, so clicking anywhere on it picks the batch.
+                    // Inside is a real radio button (name="batch" groups them, so only one
+                    // can be ticked). It's a controlled input: `checked` comes from our
+                    // selectedBatchId state, and onChange updates that state.
+                    // has-focus-visible:… draws the focus ring around the whole card when
+                    // the radio inside is reached with the keyboard.
                     <label
                       key={batch.id}
                       className={cn(
@@ -204,7 +277,10 @@ export default function ProductDetails({
                           <CalendarClock className="size-3.5" aria-hidden="true" />
                           {describeExpiry(batch.expiry_date)}
                         </span>
-                        {/* Notes as plain coloured text */}
+                        {/* Notes as plain coloured text. "Sells first" marks the
+                            first card: batches arrive in selling order (soonest
+                            expiry first), the same order the menu's quick "+"
+                            takes stock in. */}
                         <span className="flex flex-wrap gap-x-3 text-xs font-semibold">
                           {index === 0 && <span className="text-brand-strong">Sells first</span>}
                           {markedDown && <span className="text-warning-strong">{NEAR_EXPIRY_PERCENT_OFF}% off</span>}
@@ -222,6 +298,11 @@ export default function ProductDetails({
         </div>
 
         {/* ── Footer: quantity + add ── */}
+        {/* If nothing more can be added (sold out, or it's all in the basket
+            already), a short note replaces the controls. aria-live="polite"
+            makes screen readers read out the number when it changes. The Add
+            button passes Math.min(quantity, canAdd) as a last safety net, in
+            case the limit dropped after the quantity was chosen. */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 bg-subtle/60 px-6 py-4">
           {canAdd > 0 ? (
             <>

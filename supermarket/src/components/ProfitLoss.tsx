@@ -1,101 +1,71 @@
-import { useState, type ReactNode } from 'react';
-import { Bar, BarChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+// ════════════════════════════════════════════════════════════════════════════
+// ProfitLoss.tsx: the chart and table for the period on show in the
+// Analytics tab (so only admins see it).
+//
+// Analytics.tsx decides WHICH period is on show (a day, a month or a year)
+// and passes in its rows: hours of the day, days of the month, or months of
+// the year. This component draws them:
+//   - a chart, one column per row: the bar is the gross sales, the line is
+//     the net income (it dips below the zero line when a row lost money);
+//   - a table, one line per row, with a Total line at the bottom.
+// Clicking a column or a table row "opens" it (onOpen): in a year that shows
+// the month, in a month that shows the day. Hours don't open any further.
+//
+// The words, as used everywhere on the Analytics tab. All of them are worked
+// out in the database by profit_and_loss_between():
+//   Orders          how many sales were made.
+//   Gross sales     money actually taken in from customers
+//                   (orders.final_amount): AFTER the 15% near-expiry
+//                   markdown and AFTER the part paid with loyalty points.
+//   Cost of goods   what the items sold cost the store: quantity × the cost
+//                   saved on each order line at the moment of sale.
+//   Stock losses    stock that left WITHOUT being sold, valued at cost:
+//                   expired + spoiled + damaged (rows in spoilage_logs).
+//   Total cost      cost of goods + stock losses.
+//   Net income      gross sales − total cost. What the store really made.
+// ════════════════════════════════════════════════════════════════════════════
+import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { ProfitLossPeriod, ProfitLossTotals } from '../types/app';
-import { NEAR_EXPIRY_PERCENT_OFF } from '../lib/pricing';
+import { slotLabel, type Step } from '../lib/periods';
 import { cn } from '@/lib/utils';
 
 // ── Colours ────────────────────────────────────────────────────────────────
-// Gain = the brand green, loss = a light coral red.
-// To red-green colour-blind people, a green and a red of the SAME darkness
-// look alike. The deep green and the light coral differ in darkness, so they
-// stay easy to tell apart (checked with a colour-blindness validator). Gains
-// are also drawn ABOVE the zero line and losses BELOW it, and the table under
-// the chart has every number, so nothing depends on colour alone.
-const GAIN_COLOR = '#00873E';
-const LOSS_COLOR = '#F7797A';
+// Gross sales = the brand green bars; net income = a dark ink line. A line
+// and bars are told apart by their shape, not only their colour, and the
+// table under the chart has every number. Recharts draws SVG, so it needs
+// real colour values: SALES_COLOR is --color-brand and NET_COLOR is
+// --color-ink from index.css.
+const SALES_COLOR = '#00873E';
+const NET_COLOR = '#2A2F26';
 const GRID = '#E5E7EB';
 const AXIS_TEXT = '#666666';
 const axisTick = { fill: AXIS_TEXT, fontSize: 12 };
 
 // ── Formatting ─────────────────────────────────────────────────────────────
-const money = (value: number) =>
-  `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+// Full amount: ₱12,345.60 (a minus sign in front when negative: −₱30.00).
+export const money = (value: number) =>
+  `${value < 0 ? '−' : ''}₱${Math.abs(value).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+// Short amount for the chart's left axis: ₱950, ₱1.2K, −₱3K.
 const compactNumber = new Intl.NumberFormat('en-PH', { notation: 'compact', maximumFractionDigits: 1 });
 const compactMoney = (value: number) => `${value < 0 ? '−' : ''}₱${compactNumber.format(Math.abs(value))}`;
 
-type Granularity = 'daily' | 'weekly' | 'monthly';
+// Net income in colour: green when positive, red when negative.
+export const netClass = (value: number) =>
+  value < 0 ? 'font-semibold text-danger-strong' : value > 0 ? 'font-semibold text-brand-strong' : '';
 
-const GRANULARITIES: { id: Granularity; label: string; range: string }[] = [
-  { id: 'daily', label: 'Day by day', range: 'Last 30 days' },
-  { id: 'weekly', label: 'Week by week', range: 'Last 12 weeks' },
-  { id: 'monthly', label: 'Month by month', range: 'Last 12 months' },
-];
-
-// Dates come from the database as 'YYYY-MM-DD'. Read them as UTC so the day
-// never shifts because of the computer's time zone.
-const DAY_MS = 86_400_000;
-const formatDay = (iso: string, options: Intl.DateTimeFormatOptions) =>
-  new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-PH', { ...options, timeZone: 'UTC' });
-
-// How a period is named. Short for chart labels, long for the table:
-//   daily   "Oct 5"         / "Sun, Oct 5"
-//   weekly  "Oct 6"         / "Oct 6 – 12"
-//   monthly "Oct"           / "October 2026"
-function periodName(start: string, granularity: Granularity, long: boolean): string {
-  if (granularity === 'daily') {
-    return formatDay(start, long ? { weekday: 'short', month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric' });
-  }
-  if (granularity === 'weekly') {
-    if (!long) return formatDay(start, { month: 'short', day: 'numeric' });
-    const end = new Date(new Date(`${start}T00:00:00Z`).getTime() + 6 * DAY_MS).toISOString().slice(0, 10);
-    const sameMonth = start.slice(0, 7) === end.slice(0, 7);
-    return `${formatDay(start, { month: 'short', day: 'numeric' })} – ${formatDay(end, sameMonth ? { day: 'numeric' } : { month: 'short', day: 'numeric' })}`;
-  }
-  return formatDay(start, long ? { month: 'long', year: 'numeric' } : { month: 'short' });
-}
-
-// Adds a list of periods together into one set of totals.
-const TOTAL_KEYS: (keyof ProfitLossTotals)[] = [
-  'orders',
-  'revenue',
-  'cost_of_goods',
-  'gross_profit',
-  'near_expiry_discount',
-  'points_discount',
-  'expired_loss',
-  'spoiled_loss',
-  'damaged_loss',
-  'total_losses',
-  'net_profit',
-];
-function addUp(periods: ProfitLossPeriod[]): ProfitLossTotals {
-  const totals = Object.fromEntries(TOTAL_KEYS.map((key) => [key, 0])) as unknown as ProfitLossTotals;
-  for (const period of periods) {
-    for (const key of TOTAL_KEYS) totals[key] += Number(period[key]) || 0;
-  }
-  return totals;
-}
-
-// ── Small pieces ───────────────────────────────────────────────────────────
-
-// One summary number above the chart.
-function SummaryTile({ label, value, note, tone }: { label: string; value: number; note?: ReactNode; tone?: 'gain' | 'loss' }) {
-  return (
-    <div className="rounded-md border border-gray-200 bg-white p-4">
-      <div className="text-xs font-medium text-ink-muted">{label}</div>
-      <div
-        className={cn(
-          'mt-1 text-xl font-bold tracking-tight tabular-nums',
-          tone === 'gain' && 'text-brand-strong',
-          tone === 'loss' && 'text-danger-strong',
-          !tone && 'text-ink'
-        )}
-      >
-        {money(value)}
-      </div>
-      {note && <div className="mt-0.5 text-xs text-ink-muted">{note}</div>}
-    </div>
-  );
+// The numbers of one row (or of the totals), as real numbers. Numbers can
+// arrive from the database as text, so each goes through Number(...).
+export function rowNumbers(row: ProfitLossTotals) {
+  const costOfGoods = Number(row.cost_of_goods);
+  const losses = Number(row.total_losses);
+  return {
+    orders: Number(row.orders),
+    grossSales: Number(row.revenue),
+    costOfGoods,
+    losses,
+    totalCost: costOfGoods + losses,
+    netIncome: Number(row.net_profit),
+  };
 }
 
 // A money cell in the table. Zero shows as a dash so the real numbers stand out.
@@ -107,219 +77,212 @@ function MoneyCell({ value, className }: { value: number; className?: string }) 
   );
 }
 
-// Net profit: green when positive, red when negative.
-const netClass = (value: number) => (value < 0 ? 'font-semibold text-danger-strong' : value > 0 ? 'font-semibold text-brand-strong' : '');
-
+// One column of the chart.
 interface ChartRow {
-  label: string;
-  longLabel: string;
-  gain: number;
-  loss: number; // stored as a negative number so the bar points down
-  period: ProfitLossPeriod;
+  start: string;
+  label: string; // short name under the column ("8 AM", "2", "Jan")
+  longLabel: string; // full name for the hover box
+  grossSales: number;
+  netIncome: number;
+  row: ProfitLossPeriod;
 }
 
-// What appears when hovering a bar.
-function ChartTooltip({ active, payload }: { active?: boolean; payload?: { payload: ChartRow }[] }) {
+// The box shown when hovering a column. Recharts passes `active` (is the
+// mouse over a column?) and `payload` (each entry's `.payload` is the
+// ChartRow that column was drawn from). Returning null draws nothing.
+function ChartTooltip({ active, payload, canOpen }: { active?: boolean; payload?: { payload: ChartRow }[]; canOpen: boolean }) {
   if (!active || !payload?.length) return null;
-  const { longLabel, period } = payload[0].payload;
+  const { longLabel, row } = payload[0].payload;
+  const n = rowNumbers(row);
   return (
     <div className="space-y-1 rounded-md border border-gray-200 bg-white p-3 text-xs shadow-md">
       <div className="font-semibold text-ink">{longLabel}</div>
       <div className="flex justify-between gap-6">
-        <span className="text-ink-muted">Sales</span>
-        <span className="tabular-nums">{money(period.revenue)}</span>
+        <span className="text-ink-muted">Orders</span>
+        <span className="tabular-nums">{n.orders}</span>
       </div>
       <div className="flex justify-between gap-6">
-        <span className="text-ink-muted">Gain (gross profit)</span>
-        <span className="text-brand-strong tabular-nums">{money(period.gross_profit)}</span>
+        <span className="text-ink-muted">Gross sales</span>
+        <span className="tabular-nums">{money(n.grossSales)}</span>
       </div>
       <div className="flex justify-between gap-6">
-        <span className="text-ink-muted">Losses</span>
-        <span className="text-danger-strong tabular-nums">−{money(period.total_losses)}</span>
+        <span className="text-ink-muted">Total cost</span>
+        <span className="tabular-nums">{money(n.totalCost)}</span>
       </div>
       <div className="flex justify-between gap-6 border-t border-gray-100 pt-1 font-semibold">
-        <span>Net profit</span>
-        <span className={cn('tabular-nums', netClass(period.net_profit))}>{money(period.net_profit)}</span>
+        <span>Net income</span>
+        <span className={cn('tabular-nums', netClass(n.netIncome))}>{money(n.netIncome)}</span>
       </div>
+      {canOpen && <div className="pt-1 text-[11px] text-ink-subtle">Click to open</div>}
     </div>
   );
 }
 
-// ── The section ────────────────────────────────────────────────────────────
-
 interface ProfitLossProps {
-  daily: ProfitLossPeriod[];
-  weekly: ProfitLossPeriod[];
-  monthly: ProfitLossPeriod[];
+  // How the rows are split: 'hour', 'day' or 'month'.
+  step: Step;
+  // The rows, oldest first (left to right in the chart).
+  periods: ProfitLossPeriod[];
+  // The whole period's totals (the table's Total line).
+  totals: ProfitLossTotals;
+  // The word for one row, for the table heading ("Hour", "Day", "Month").
+  rowWord: string;
+  // Called with a row's start when it's clicked, to open it. Left out when
+  // rows can't be opened (hours).
+  onOpen?: (start: string) => void;
 }
 
-// "Profit & loss" on the Analytics tab: switch between day / week / month and
-// see sales, gains and stock losses for each, as totals, a chart and a table.
-export default function ProfitLoss({ daily, weekly, monthly }: ProfitLossProps) {
-  const [granularity, setGranularity] = useState<Granularity>('daily');
-
-  const periods = { daily, weekly, monthly }[granularity];
-  const totals = addUp(periods);
-  const range = GRANULARITIES.find((g) => g.id === granularity)?.range ?? '';
-
-  const chartRows: ChartRow[] = periods.map((period) => ({
-    label: periodName(period.start, granularity, false),
-    longLabel: periodName(period.start, granularity, true),
-    gain: Number(period.gross_profit),
-    loss: -Number(period.total_losses),
-    period,
+export default function ProfitLoss({ step, periods, totals, rowWord, onOpen }: ProfitLossProps) {
+  const chartRows: ChartRow[] = periods.map((row) => ({
+    start: row.start,
+    label: slotLabel(step, row.start, false),
+    longLabel: slotLabel(step, row.start, true),
+    grossSales: Number(row.revenue),
+    netIncome: Number(row.net_profit),
+    row,
   }));
-  const hasAnyData = periods.some((p) => p.revenue !== 0 || p.total_losses !== 0);
-
-  // The table lists the newest period first.
-  const tableRows = [...periods].reverse();
+  // Anything at all to draw? (Sales or losses in at least one row.)
+  const hasAnyData = periods.some((p) => Number(p.revenue) !== 0 || Number(p.total_losses) !== 0);
+  // The table: every day / month, but only the hours that had something
+  // going on (24 mostly empty lines would hide the busy ones).
+  const tableRows = step === 'hour' ? periods.filter((p) => Number(p.orders) > 0 || Number(p.total_losses) > 0) : periods;
+  const sum = rowNumbers(totals);
 
   return (
-    <section aria-labelledby="pl-title" className="space-y-5 rounded-lg border border-gray-200 bg-white p-5 shadow-xs">
-      {/* Title + day/week/month switch */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 id="pl-title" className="text-base font-bold text-ink">
-            Profit &amp; loss
-          </h3>
-          <p className="text-xs text-ink-muted">
-            {range}. Sales minus what the goods cost, minus expired, spoiled and damaged stock.
-          </p>
-        </div>
-        <div className="flex rounded-full bg-subtle p-1" role="group" aria-label="Show profit and loss">
-          {GRANULARITIES.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              aria-pressed={granularity === option.id}
-              onClick={() => setGranularity(option.id)}
-              className={cn(
-                'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors',
-                granularity === option.id ? 'bg-brand text-white shadow-xs' : 'text-ink-muted hover:text-ink'
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Totals for the whole range */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <SummaryTile label="Sales" value={totals.revenue} note={`${totals.orders} orders`} />
-        <SummaryTile
-          label="Gain (gross profit)"
-          value={totals.gross_profit}
-          tone="gain"
-          note={`after ${money(totals.cost_of_goods)} cost of goods`}
-        />
-        <SummaryTile
-          label="Stock losses"
-          value={totals.total_losses}
-          tone="loss"
-          note="expired + spoiled + damaged"
-        />
-        <SummaryTile
-          label="Net profit"
-          value={totals.net_profit}
-          tone={totals.net_profit < 0 ? 'loss' : 'gain'}
-          note="gain minus losses"
-        />
-      </div>
-
-      {/* The 15% markdown and points are already taken out of "Sales"; this says how much. */}
-      <p className="rounded-md bg-sun/35 px-3 py-2 text-xs text-brand-ink">
-        Sales already have <strong className="font-semibold">{money(totals.near_expiry_discount)}</strong> of{' '}
-        {NEAR_EXPIRY_PERCENT_OFF}% near-expiry discounts and{' '}
-        <strong className="font-semibold">{money(totals.points_discount)}</strong> paid with loyalty points taken off.
-      </p>
-
-      {/* Chart: green bars up = gain, red bars down = losses */}
-      {/* Legend: what the two colours mean */}
-      <div className="flex flex-wrap justify-end gap-4 text-xs text-ink-muted" aria-hidden="true">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-3 rounded-sm" style={{ background: GAIN_COLOR }} /> Gain (gross profit), above the line
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="size-3 rounded-sm" style={{ background: LOSS_COLOR }} /> Stock losses, below the line
-        </span>
-      </div>
-
+    <div className="space-y-5">
+      {/* ── Chart ── */}
       {hasAnyData ? (
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={chartRows} stackOffset="sign" margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-            <CartesianGrid vertical={false} stroke={GRID} />
-            <XAxis
-              dataKey="label"
-              tick={axisTick}
-              tickLine={false}
-              axisLine={false}
-              interval={granularity === 'daily' ? 4 : 0}
-            />
-            <YAxis tickFormatter={compactMoney} tick={axisTick} tickLine={false} axisLine={false} width={60} />
-            <ReferenceLine y={0} stroke="#9CA3AF" />
-            <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(0, 0, 0, 0.04)' }} />
-            <Bar dataKey="gain" name="Gain (gross profit)" stackId="pl" fill={GAIN_COLOR} maxBarSize={24} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="loss" name="Stock losses" stackId="pl" fill={LOSS_COLOR} maxBarSize={24} radius={[0, 0, 4, 4]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <>
+          {/* Legend: what the two marks mean (hand-made so it can sit above
+              the chart; aria-hidden because the table has every number). */}
+          <div className="flex flex-wrap justify-end gap-4 text-xs text-ink-muted" aria-hidden="true">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-3 rounded-sm" style={{ background: SALES_COLOR }} /> Gross sales
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-0.5 w-4 rounded-full" style={{ background: NET_COLOR }} /> Net income
+            </span>
+          </div>
+          {/* How the chart is built (Recharts):
+                ResponsiveContainer  as wide as its box; redraws on resize
+                ComposedChart        bars and a line together, one column
+                                     per row in `data`
+                ReferenceLine y=0    the ₱0 line net income dips below
+                onClick              Recharts says which column was clicked
+                                     (activeTooltipIndex: its position in
+                                     the list, as a number or as text) */}
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart
+              data={chartRows}
+              margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
+              onClick={(state) => {
+                if (!onOpen || state?.activeTooltipIndex == null) return;
+                const index = Number(state.activeTooltipIndex);
+                const row = Number.isInteger(index) ? chartRows[index] : undefined;
+                if (row) onOpen(row.start);
+              }}
+              style={onOpen ? { cursor: 'pointer' } : undefined}
+            >
+              <CartesianGrid vertical={false} stroke={GRID} />
+              {/* Hours: every 3rd label; days: as many as fit; months: all. */}
+              <XAxis
+                dataKey="label"
+                tick={axisTick}
+                tickLine={false}
+                axisLine={false}
+                interval={step === 'hour' ? 2 : step === 'day' ? 'preserveStartEnd' : 0}
+              />
+              <YAxis tickFormatter={compactMoney} tick={axisTick} tickLine={false} axisLine={false} width={60} />
+              <ReferenceLine y={0} stroke="#9CA3AF" />
+              <Tooltip content={<ChartTooltip canOpen={Boolean(onOpen)} />} cursor={{ fill: 'rgba(0, 0, 0, 0.04)' }} />
+              <Bar dataKey="grossSales" name="Gross sales" fill={SALES_COLOR} maxBarSize={28} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              <Line
+                dataKey="netIncome"
+                name="Net income"
+                type="monotone"
+                stroke={NET_COLOR}
+                strokeWidth={2}
+                dot={{ r: 2.5, fill: NET_COLOR, strokeWidth: 0 }}
+                activeDot={{ r: 5, stroke: '#FFFFFF', strokeWidth: 2 }}
+                isAnimationActive={false}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </>
       ) : (
         <div className="flex h-[200px] items-center justify-center rounded-md border border-dashed border-gray-200 text-sm text-ink-muted">
-          No sales or losses recorded in this period.
+          No sales or stock losses in this period.
         </div>
       )}
 
-      {/* Table: every period, newest first, with a totals line at the bottom */}
-      <div className="max-h-[26rem] overflow-auto rounded-md border border-gray-200">
+      {/* ── Table ── */}
+      {/* The box scrolls when the table is tall (a month has up to 31
+          lines); the heading (sticky top-0) and the Total line (sticky
+          bottom-0) stay in view. Lines that can be opened are clickable and
+          reachable with the keyboard (Tab, then Enter or Space). */}
+      <div className="max-h-[28rem] overflow-auto rounded-md border border-gray-200">
         <table className="w-full text-left text-xs text-ink">
           <thead className="sticky top-0 z-10 border-b border-gray-200 bg-subtle font-semibold text-ink-muted">
             <tr>
-              <th className="px-3 py-2">{granularity === 'daily' ? 'Day' : granularity === 'weekly' ? 'Week' : 'Month'}</th>
+              <th className="px-3 py-2">{rowWord}</th>
               <th className="px-3 py-2 text-right">Orders</th>
-              <th className="px-3 py-2 text-right">Sales</th>
-              <th className="px-3 py-2 text-right">{NEAR_EXPIRY_PERCENT_OFF}% off given</th>
+              <th className="px-3 py-2 text-right">Gross sales</th>
               <th className="px-3 py-2 text-right">Cost of goods</th>
-              <th className="px-3 py-2 text-right">Gain</th>
-              <th className="px-3 py-2 text-right">Expired</th>
-              <th className="px-3 py-2 text-right">Spoiled</th>
-              <th className="px-3 py-2 text-right">Damaged</th>
-              <th className="px-3 py-2 text-right">Net profit</th>
+              <th className="px-3 py-2 text-right">Stock losses</th>
+              <th className="px-3 py-2 text-right">Total cost</th>
+              <th className="px-3 py-2 text-right">Net income</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {tableRows.map((period) => (
-              <tr key={period.start} className="hover:bg-subtle/60">
-                <td className="px-3 py-2 font-medium whitespace-nowrap">{periodName(period.start, granularity, true)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {period.orders === 0 ? <span className="text-ink-subtle">—</span> : period.orders}
+            {tableRows.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-3 py-6 text-center text-ink-muted">
+                  No sales or stock losses on this day.
                 </td>
-                <MoneyCell value={Number(period.revenue)} />
-                <MoneyCell value={Number(period.near_expiry_discount)} className="text-warning-strong" />
-                <MoneyCell value={Number(period.cost_of_goods)} className="text-ink-muted" />
-                <MoneyCell value={Number(period.gross_profit)} className="text-brand-strong" />
-                <MoneyCell value={Number(period.expired_loss)} className="text-danger-strong" />
-                <MoneyCell value={Number(period.spoiled_loss)} className="text-danger-strong" />
-                <MoneyCell value={Number(period.damaged_loss)} className="text-danger-strong" />
-                <MoneyCell value={Number(period.net_profit)} className={netClass(Number(period.net_profit))} />
               </tr>
-            ))}
+            )}
+            {tableRows.map((row) => {
+              const n = rowNumbers(row);
+              const open = onOpen ? () => onOpen(row.start) : undefined;
+              return (
+                <tr
+                  key={row.start}
+                  tabIndex={open ? 0 : undefined}
+                  onClick={open}
+                  onKeyDown={(e) => {
+                    if (open && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      open();
+                    }
+                  }}
+                  className={cn('hover:bg-subtle/60', open && 'cursor-pointer outline-none focus-visible:bg-subtle')}
+                >
+                  <td className="px-3 py-2 font-medium whitespace-nowrap">{slotLabel(step, row.start, true)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">
+                    {n.orders === 0 ? <span className="text-ink-subtle">—</span> : n.orders}
+                  </td>
+                  <MoneyCell value={n.grossSales} />
+                  <MoneyCell value={n.costOfGoods} className="text-ink-muted" />
+                  <MoneyCell value={n.losses} className="text-danger-strong" />
+                  <MoneyCell value={n.totalCost} />
+                  <MoneyCell value={n.netIncome} className={netClass(n.netIncome)} />
+                </tr>
+              );
+            })}
           </tbody>
           <tfoot className="sticky bottom-0 border-t border-gray-200 bg-subtle font-semibold">
             <tr>
               <td className="px-3 py-2">Total</td>
-              <td className="px-3 py-2 text-right tabular-nums">{totals.orders}</td>
-              <MoneyCell value={totals.revenue} />
-              <MoneyCell value={totals.near_expiry_discount} className="text-warning-strong" />
-              <MoneyCell value={totals.cost_of_goods} />
-              <MoneyCell value={totals.gross_profit} className="text-brand-strong" />
-              <MoneyCell value={totals.expired_loss} className="text-danger-strong" />
-              <MoneyCell value={totals.spoiled_loss} className="text-danger-strong" />
-              <MoneyCell value={totals.damaged_loss} className="text-danger-strong" />
-              <MoneyCell value={totals.net_profit} className={netClass(totals.net_profit)} />
+              <td className="px-3 py-2 text-right tabular-nums">{sum.orders}</td>
+              <MoneyCell value={sum.grossSales} />
+              <MoneyCell value={sum.costOfGoods} />
+              <MoneyCell value={sum.losses} className="text-danger-strong" />
+              <MoneyCell value={sum.totalCost} />
+              <MoneyCell value={sum.netIncome} className={netClass(sum.netIncome)} />
             </tr>
           </tfoot>
         </table>
       </div>
-    </section>
+    </div>
   );
 }
