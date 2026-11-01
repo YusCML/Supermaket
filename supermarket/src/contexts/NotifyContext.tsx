@@ -6,16 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-
-// The app's own pop-ups, used instead of the browser's alert() / confirm()
-// boxes (the grey "localhost:3000 says..." dialogs).
-//
-//   notify('Checkout completed successfully!', 'success')
-//     -> a small card in the top-right corner that fades away on its own.
-//
-//   if (await askToConfirm({ message: 'Set roles?' })) { ... }
-//     -> a dialog in the middle of the screen with Cancel / Confirm buttons.
-//        Resolves to true if they confirmed, false if they cancelled.
+import { Check, AlertTriangle, Info } from 'lucide-react';
 
 type NoticeType = 'success' | 'error' | 'info';
 
@@ -39,26 +30,17 @@ interface NotifyContextValue {
 
 const NotifyContext = createContext<NotifyContextValue | undefined>(undefined);
 
-// How long each kind of notice stays up. Errors stay longer so there's time to
-// read them; every notice can also be closed with its ×.
+// How long each kind of notice stays up.
 const NOTICE_DURATION_MS: Record<NoticeType, number> = {
   success: 3000,
   info: 4000,
   error: 6000,
 };
 
-const NOTICE_ICON: Record<NoticeType, string> = {
-  success: '✓',
-  error: '!',
-  info: 'i',
-};
-
 export function NotifyProvider({ children }: { children: ReactNode }) {
   const [notices, setNotices] = useState<Notice[]>([]);
   const nextId = useRef(1);
 
-  // The confirmation dialog currently open (only one at a time), plus the
-  // function that hands the answer back to whoever asked.
   const [pendingConfirm, setPendingConfirm] = useState<
     (ConfirmOptions & { answer: (ok: boolean) => void }) | null
   >(null);
@@ -69,8 +51,6 @@ export function NotifyProvider({ children }: { children: ReactNode }) {
 
   const notify = (message: string, type: NoticeType = 'info') => {
     const id = nextId.current++;
-    // Clicking an out-of-stock item five times shouldn't stack five copies of
-    // the same message, so an identical one already showing is replaced.
     setNotices((prev) => [
       ...prev.filter((n) => !(n.message === message && n.type === type)),
       { id, type, message },
@@ -81,7 +61,6 @@ export function NotifyProvider({ children }: { children: ReactNode }) {
   const askToConfirm = (options: ConfirmOptions) =>
     new Promise<boolean>((resolve) => {
       setPendingConfirm((previous) => {
-        // A new question replaces an unanswered one; the old one counts as "no".
         previous?.answer(false);
         return { ...options, answer: resolve };
       });
@@ -92,7 +71,6 @@ export function NotifyProvider({ children }: { children: ReactNode }) {
     setPendingConfirm(null);
   };
 
-  // Esc cancels the dialog, like the browser's own one did.
   useEffect(() => {
     if (!pendingConfirm) return;
     const onKey = (e: KeyboardEvent) => {
@@ -113,7 +91,11 @@ export function NotifyProvider({ children }: { children: ReactNode }) {
             className={`notice notice-${n.type}`}
             role={n.type === 'error' ? 'alert' : 'status'}
           >
-            <span className="notice-icon" aria-hidden="true">{NOTICE_ICON[n.type]}</span>
+            <span className="notice-icon" aria-hidden="true">
+              {n.type === 'success' && <Check className="size-3.5" />}
+              {n.type === 'error' && <AlertTriangle className="size-3.5" />}
+              {n.type === 'info' && <Info className="size-3.5" />}
+            </span>
             <span className="notice-message">{n.message}</span>
             <button className="notice-close" onClick={() => dismiss(n.id)} aria-label="Close">
               ×
@@ -129,8 +111,6 @@ export function NotifyProvider({ children }: { children: ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="confirm-title"
-            // Clicks inside the dialog shouldn't count as clicking the dark
-            // background (which cancels).
             onMouseDown={(e) => e.stopPropagation()}
           >
             <h3 id="confirm-title">{pendingConfirm.title ?? 'Please confirm'}</h3>

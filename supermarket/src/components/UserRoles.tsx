@@ -5,35 +5,25 @@ import { ALL_ROLES, ROLE_INFO } from '../lib/roles';
 import type { AppRole, Customer } from '../types/app';
 
 interface UserRolesProps {
-  // Every account. Everyone is a loyalty member, so the member list doubles
-  // as the list of users.
   users: Customer[];
-  // Who holds which staff role: { userId: ['cashier', 'admin'] }.
   staffRoles: Record<string, AppRole[]>;
   onSaveRoles: (userId: string, roles: AppRole[]) => Promise<void>;
 }
 
 type RoleFilter = 'all' | 'cashier' | 'admin' | 'customer-only';
 
-// Same roles in the same order, regardless of how they were ticked.
 function sameRoles(a: AppRole[], b: AppRole[]) {
   return ALL_ROLES.every((role) => a.includes(role) === b.includes(role));
 }
 
-// Admin page tab for deciding who can do what. Each person can hold any mix
-// of Cashier and Admin on top of Customer, which everyone always has (it's
-// their loyalty account). Tick the boxes, then Save that row.
 export default function UserRoles({ users, staffRoles, onSaveRoles }: UserRolesProps) {
   const { user } = useAuth();
   const { notify, askToConfirm } = useNotify();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
-  // Ticks changed but not saved yet, by user id. Kept apart from the saved
-  // roles so you can see what's really stored until you hit Save.
   const [pending, setPending] = useState<Record<string, AppRole[]>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
 
-  // What's saved in the database for this person right now.
   const savedRolesOf = (userId: string): AppRole[] => [
     'customer',
     ...(staffRoles[userId] ?? []),
@@ -56,7 +46,6 @@ export default function UserRoles({ users, staffRoles, onSaveRoles }: UserRolesP
   const toggleRole = (userId: string, role: AppRole, checked: boolean) => {
     setPending((prev) => {
       const current = prev[userId] ?? savedRolesOf(userId);
-      // Rebuild from ALL_ROLES so the list stays in the usual order.
       const next = ALL_ROLES.filter((r) => (r === role ? checked : current.includes(r)));
       return { ...prev, [userId]: next };
     });
@@ -78,7 +67,6 @@ export default function UserRoles({ users, staffRoles, onSaveRoles }: UserRolesP
     setSavingId(member.id);
     try {
       await onSaveRoles(member.id, newRoles);
-      // Saved, so this row no longer has unsaved ticks.
       setPending((prev) => {
         const next = { ...prev };
         delete next[member.id];
@@ -92,7 +80,6 @@ export default function UserRoles({ users, staffRoles, onSaveRoles }: UserRolesP
     }
   };
 
-  // Throw away unsaved ticks on one row.
   const handleUndo = (userId: string) => {
     setPending((prev) => {
       const next = { ...prev };
@@ -116,8 +103,6 @@ export default function UserRoles({ users, staffRoles, onSaveRoles }: UserRolesP
         <input
           type="text"
           className="w-full sm:w-72 rounded-xl border border-gray-300 bg-[#FFFFFF] px-3.5 py-2 text-xs text-[#333333] placeholder-[#333333]/40 outline-none transition-all focus:border-[#2E7D32] focus:ring-2 focus:ring-[#2E7D32]/20 shadow-xs"
-          // No "email"/"name" in the hint, or Chrome shows its own saved-address
-          // pop-up over the box. It still searches names, emails and loyalty IDs.
           placeholder="Search members or loyalty ID..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -173,8 +158,8 @@ export default function UserRoles({ users, staffRoles, onSaveRoles }: UserRolesP
                         <div className="flex items-center gap-2">
                           <span>{member.name || 'N/A'}</span>
                           {isMe && (
-                            <span className="rounded-full bg-[#2E7D32]/10 px-2 py-0.5 text-[10px] font-bold text-[#2E7D32] border border-[#2E7D32]/20">
-                              You
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#2E7D32]">
+                              (You)
                             </span>
                           )}
                         </div>
@@ -184,9 +169,6 @@ export default function UserRoles({ users, staffRoles, onSaveRoles }: UserRolesP
                         {member.loyalty_id || '—'}
                       </td>
                       {ALL_ROLES.map((role) => {
-                        // Customer can't be removed: it's everyone's loyalty account.
-                        // Your own Admin can't be removed either (ask another
-                        // admin), so the store always keeps at least one admin.
                         const locked =
                           role === 'customer' || (isMe && role === 'admin' && savedRoles.includes('admin'));
                         const reason =

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Minus, Plus, X, ImageIcon } from 'lucide-react';
 import type { ProductBatch, ProductInventorySummary } from '../types/app';
 import { daysUntilExpiry, formatExpiry, isNearExpiry } from '../lib/expiry';
 import { markedDownPrice, NEAR_EXPIRY_DAYS, NEAR_EXPIRY_PERCENT_OFF } from '../lib/pricing';
@@ -6,22 +7,13 @@ import BarcodeImage from './BarcodeImage';
 
 interface ProductDetailsProps {
   product: ProductInventorySummary;
-  // This product's batches that can still be sold, soonest expiry first.
-  // Shown at the till and at self-serve. If it's empty (batches couldn't be
-  // loaded), the window shows the summary and the database picks the batch.
   batches: ProductBatch[];
-  // How many of this product are already in the basket, in total and per batch,
-  // so we never offer more than the shelf (or the batch) has.
   inBasket: number;
   inBasketForBatch: (batchId: number) => number;
-  // `batch` is the one picked in the list; undefined if there's no list.
   onAdd: (quantity: number, batch?: ProductBatch) => void;
   onClose: () => void;
 }
 
-// The window that opens when a product is picked at checkout: price (and any
-// near-expiry markdown), stock, expiry dates, and a list of batches to choose
-// from, plus a quantity and Add to basket.
 export default function ProductDetails({
   product,
   batches,
@@ -30,11 +22,8 @@ export default function ProductDetails({
   onAdd,
   onClose,
 }: ProductDetailsProps) {
-  // Units of a batch that aren't in the basket yet.
   const freeIn = (batch: ProductBatch) => batch.quantity_remaining - inBasketForBatch(batch.id);
 
-  // Starts on the batch that would be sold first anyway (soonest expiry) that
-  // still has units left. The cashier can pick another one in the list.
   const [selectedBatchId, setSelectedBatchId] = useState<number | null>(
     () => batches.find((b) => freeIn(b) > 0)?.id ?? null
   );
@@ -44,22 +33,16 @@ export default function ProductDetails({
   const selectedBatch = batches.find((b) => b.id === selectedBatchId) ?? null;
   const productRoomLeft = Math.max(0, product.stock_quantity - inBasket);
 
-  // How many can still go into the basket: limited by the product's stock and,
-  // when a batch is picked, by what's left in that batch.
   const canAdd = hasBatches
     ? selectedBatch
       ? Math.min(productRoomLeft, freeIn(selectedBatch))
       : 0
     : productRoomLeft;
 
-  // The price shown: with a batch picked, it's 15% off only if that batch is
-  // near expiry. Without a batch list, the markdown applies to however
-  // many units are near expiry, and the note explains it.
   const salePrice = markedDownPrice(product.price);
   const selectedIsMarkedDown = selectedBatch ? isNearExpiry(selectedBatch.expiry_date) : false;
   const showSale = hasBatches ? selectedIsMarkedDown : product.near_expiry_count > 0;
 
-  // Esc closes the window.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -68,7 +51,6 @@ export default function ProductDetails({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Picking another batch: keep the quantity, but not more than that batch has.
   const selectBatch = (batch: ProductBatch) => {
     if (freeIn(batch) <= 0) return;
     setSelectedBatchId(batch.id);
@@ -89,7 +71,6 @@ export default function ProductDetails({
         role="dialog"
         aria-modal="true"
         aria-labelledby="product-details-title"
-        // Clicks inside the window shouldn't count as clicking the dark background.
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -105,15 +86,24 @@ export default function ProductDetails({
             </small>
           </div>
           <button
-            className="flex h-8 w-8 items-center justify-center rounded-full text-lg font-semibold text-[#333333]/50 hover:bg-[#F5F5F5] hover:text-[#333333] transition-colors"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#333333]/50 hover:bg-[#F5F5F5] hover:text-[#333333] transition-colors"
             onClick={onClose}
             aria-label="Close"
           >
-            ×
+            <X className="size-4" />
           </button>
         </div>
 
         <div className="overflow-y-auto space-y-5 pr-1">
+          {/* Product Image */}
+          <div className="w-full h-48 bg-[#F5F5F5] rounded-xl overflow-hidden flex items-center justify-center border border-gray-200/60">
+            {product.image_url ? (
+              <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+            ) : (
+              <ImageIcon className="size-12 text-[#333333]/20" />
+            )}
+          </div>
+
           {/* Barcode Display */}
           <div className="flex justify-center rounded-xl bg-[#F5F5F5] p-3 border border-gray-200/60">
             <BarcodeImage value={product.barcode} />
@@ -126,7 +116,7 @@ export default function ProductDetails({
                 <div className="flex items-center gap-2">
                   <span className="line-through text-xs text-[#333333]/50">₱{product.price.toFixed(2)}</span>
                   <strong className="text-lg font-bold text-[#2E7D32]">₱{salePrice.toFixed(2)}</strong>
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800">
                     {NEAR_EXPIRY_PERCENT_OFF}% off
                   </span>
                 </div>
@@ -230,14 +220,14 @@ export default function ProductDetails({
                               : formatExpiry(null)}
                           </td>
                           <td className="px-3 py-2">
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-2">
                               {index === 0 && (
-                                <span className="rounded-full bg-[#2E7D32]/10 px-2 py-0.5 text-[9px] font-bold text-[#2E7D32] border border-[#2E7D32]/20">
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-[#2E7D32]">
                                   Expires first
                                 </span>
                               )}
                               {isNearExpiry(batch.expiry_date) && (
-                                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[9px] font-bold text-amber-800 border border-amber-200">
+                                <span className="text-[9px] font-bold uppercase tracking-wider text-amber-800">
                                   {NEAR_EXPIRY_PERCENT_OFF}% off
                                 </span>
                               )}
@@ -259,25 +249,24 @@ export default function ProductDetails({
             <>
               <div className="flex items-center gap-1 rounded-xl border border-gray-300 bg-[#FFFFFF] p-1 shadow-2xs">
                 <button
-                  className="h-7 w-7 rounded-lg text-xs font-bold text-[#333333] hover:bg-gray-100 disabled:opacity-30 transition-colors flex items-center justify-center"
+                  className="h-7 w-7 rounded-lg text-[#333333] hover:bg-gray-100 disabled:opacity-30 transition-colors flex items-center justify-center"
                   onClick={() => changeQuantity(quantity - 1)}
                   disabled={quantity <= 1}
                   aria-label="One less"
                 >
-                  −
+                  <Minus className="size-3.5" />
                 </button>
                 <span className="w-8 text-center text-xs font-bold text-[#333333]">{quantity}</span>
                 <button
-                  className="h-7 w-7 rounded-lg text-xs font-bold text-[#333333] hover:bg-gray-100 disabled:opacity-30 transition-colors flex items-center justify-center"
+                  className="h-7 w-7 rounded-lg text-[#333333] hover:bg-gray-100 disabled:opacity-30 transition-colors flex items-center justify-center"
                   onClick={() => changeQuantity(quantity + 1)}
                   disabled={quantity >= canAdd}
                   aria-label="One more"
                 >
-                  +
+                  <Plus className="size-3.5" />
                 </button>
               </div>
 
-              {/* Focused when the window opens, so Enter adds it straight away. */}
               <button
                 className="rounded-xl bg-[#2E7D32] px-5 py-2.5 text-xs font-bold text-[#FFFFFF] shadow-xs hover:bg-[#246628] transition-colors cursor-pointer"
                 onClick={() => onAdd(Math.min(quantity, canAdd), selectedBatch ?? undefined)}

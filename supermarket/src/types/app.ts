@@ -8,6 +8,7 @@
   cost: number;
   stock_quantity: number;
   reorder_level: number;
+  image_url?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -34,7 +35,6 @@ export interface ProductInventorySummary extends Product {
   expires_soon: boolean;
 }
 
-// The batch code isn't here on purpose: the database always generates it.
 export interface ReceiveStockInput {
   product_id: number;
   quantity: number;
@@ -120,10 +120,6 @@ export interface LoyaltyLog {
 
 export interface CartItem extends Product {
   quantity: number;
-  // Which stock batch these units come from: the batch that was picked (or the
-  // soonest-expiring one, for scans and +), at the till and at self-serve.
-  // null only if the batches weren't known; the database then takes the
-  // soonest-expiring stock.
   batch_id: number | null;
   batch_code: string | null;
   batch_expiry: string | null;
@@ -169,7 +165,6 @@ export interface CheckoutReceipt {
   items: CheckoutReceiptItem[];
 }
 
-// No barcode here: the database always generates one (a unique in-store EAN-13).
 export interface NewProductInput {
   sku: string;
   name: string;
@@ -178,6 +173,7 @@ export interface NewProductInput {
   cost: number;
   stock_quantity: number;
   reorder_level: number;
+  image_url?: string | null;
 }
 
 export interface UpdateProductInput {
@@ -187,6 +183,5 @@ export interface UpdateProductInput {
   price: number;
   cost: number;
   reorder_level: number;
+  image_url?: string | null;
 }
-
-// merged above

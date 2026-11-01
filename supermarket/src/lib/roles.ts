@@ -60,23 +60,23 @@ export const ALL_ROLES: AppRole[] = ['customer', 'cashier', 'admin'];
 // How each role is shown on the "Continue as" screen, and which page it opens.
 export const ROLE_INFO: Record<
   AppRole,
-  { label: string; icon: string; description: string; home: string }
+  { label: string; icon: 'shopping-bag' | 'receipt' | 'wrench'; description: string; home: string }
 > = {
   customer: {
     label: 'Customer',
-    icon: '🛍️',
+    icon: 'shopping-bag',
     description: 'Self-serve checkout on your own loyalty account',
     home: '/self-serve',
   },
   cashier: {
     label: 'Cashier',
-    icon: '🧾',
+    icon: 'receipt',
     description: 'Ring up customer orders and check stock levels',
     home: '/cashier',
   },
   admin: {
     label: 'Admin',
-    icon: '🛠️',
+    icon: 'wrench',
     description: 'Restock, manage members, view analytics and assign roles',
     home: '/admin',
   },

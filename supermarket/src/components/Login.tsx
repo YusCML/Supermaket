@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { loginSchema, signupSchema } from '../lib/validation';
 
@@ -112,9 +114,21 @@ export default function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#F5F5F5] px-4 py-12 font-sans antialiased selection:bg-[#2E7D32]/15 selection:text-[#2E7D32]">
       <div className="w-full max-w-md rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-8 shadow-sm">
+        
+        {/* Back to homepage link */}
+        <div className="mb-6 -mt-2">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-[#333333]/50 hover:text-[#2E7D32] transition-colors"
+          >
+            <ArrowLeft className="size-3.5" />
+            Back to homepage
+          </Link>
+        </div>
+
         {/* Header */}
         <div className="text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#FFFFFF]/50 shadow-xs">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#F5F5F5]">
             <img 
               src="/sp%20logo.jpg" 
               alt="SuperMarket Express Logo" 
@@ -177,22 +191,10 @@ export default function Login() {
           disabled={loading}
         >
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-            <path
-              fill="#4285F4"
-              d="M17.64 9.2045c0-.6381-.0573-1.2518-.1636-1.8409H9v3.4818h4.8436c-.2086 1.125-.8427 2.0781-1.7963 2.7163v2.2581h2.9086c1.7026-1.5677 2.6841-3.8745 2.6841-6.6153z"
-            />
-            <path
-              fill="#34A853"
-              d="M9 18c2.43 0 4.4673-.8063 5.9563-2.1805l-2.9086-2.2581c-.8063.54-1.8368.8586-3.0477.8586-2.3445 0-4.3286-1.5827-5.0368-3.7104H.9573v2.3318C2.4381 15.9831 5.4818 18 9 18z"
-            />
-            <path
-              fill="#FBBC05"
-              d="M3.9632 10.71c-.1801-.54-.2827-1.1173-.2827-1.71s.1026-1.17.2827-1.71V4.9582H.9573C.3477 6.1731 0 7.5477 0 9s.3477 2.8268.9573 4.0418L3.9632 10.71z"
-            />
-            <path
-              fill="#EA4335"
-              d="M9 3.5818c1.3213 0 2.5077.4541 3.4405 1.3459l2.5813-2.5813C13.4631.8909 11.4254 0 9 0 5.4818 0 2.4381 2.0168.9573 4.9582L3.9632 7.29C4.6714 5.1622 6.6555 3.5818 9 3.5818z"
-            />
+            <path fill="#4285F4" d="M17.64 9.2045c0-.6381-.0573-1.2518-.1636-1.8409H9v3.4818h4.8436c-.2086 1.125-.8427 2.0781-1.7963 2.7163v2.2581h2.9086c1.7026-1.5677 2.6841-3.8745 2.6841-6.6153z" />
+            <path fill="#34A853" d="M9 18c2.43 0 4.4673-.8063 5.9563-2.1805l-2.9086-2.2581c-.8063.54-1.8368.8586-3.0477.8586-2.3445 0-4.3286-1.5827-5.0368-3.7104H.9573v2.3318C2.4381 15.9831 5.4818 18 9 18z" />
+            <path fill="#FBBC05" d="M3.9632 10.71c-.1801-.54-.2827-1.1173-.2827-1.71s.1026-1.17.2827-1.71V4.9582H.9573C.3477 6.1731 0 7.5477 0 9s.3477 2.8268.9573 4.0418L3.9632 10.71z" />
+            <path fill="#EA4335" d="M9 3.5818c1.3213 0 2.5077.4541 3.4405 1.3459l2.5813-2.5813C13.4631.8909 11.4254 0 9 0 5.4818 0 2.4381 2.0168.9573 4.9582L3.9632 7.29C4.6714 5.1622 6.6555 3.5818 9 3.5818z" />
           </svg>
           {loading ? 'Please wait…' : 'Continue with Google'}
         </button>
@@ -214,10 +216,7 @@ export default function Login() {
           onSubmit={mode === 'signup' ? handleSignUp : handleSignIn}
         >
           <div>
-            <label
-              className="block text-xs font-semibold text-[#333333] mb-1.5"
-              htmlFor="auth-email"
-            >
+            <label className="block text-xs font-semibold text-[#333333] mb-1.5" htmlFor="auth-email">
               Email
             </label>
             <input
@@ -238,10 +237,7 @@ export default function Login() {
           </div>
 
           <div>
-            <label
-              className="block text-xs font-semibold text-[#333333] mb-1.5"
-              htmlFor="auth-password"
-            >
+            <label className="block text-xs font-semibold text-[#333333] mb-1.5" htmlFor="auth-password">
               Password
             </label>
             <input
@@ -250,9 +246,7 @@ export default function Login() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              autoComplete={
-                mode === 'signup' ? 'new-password' : 'current-password'
-              }
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
               placeholder={mode === 'signup' ? 'At least 8 characters' : ''}
               disabled={loading}
             />
@@ -265,10 +259,7 @@ export default function Login() {
 
           {mode === 'signup' && (
             <div>
-              <label
-                className="block text-xs font-semibold text-[#333333] mb-1.5"
-                htmlFor="auth-confirm"
-              >
+              <label className="block text-xs font-semibold text-[#333333] mb-1.5" htmlFor="auth-confirm">
                 Confirm password
               </label>
               <input
@@ -293,11 +284,7 @@ export default function Login() {
             className="w-full rounded-lg bg-[#2E7D32] px-4 py-2.5 text-sm font-semibold text-[#FFFFFF] shadow-md hover:bg-[#246628] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={loading}
           >
-            {loading
-              ? 'Please wait…'
-              : mode === 'signup'
-                ? 'Create account'
-                : 'Sign in'}
+            {loading ? 'Please wait…' : mode === 'signup' ? 'Create account' : 'Sign in'}
           </button>
         </form>
 

@@ -65,7 +65,7 @@ export default function Loyalty({ customers = [], logs = [], onRefresh }: Loyalt
                         {c.loyalty_id || `#${c.id}`}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className="inline-flex items-center rounded-full bg-[#2E7D32]/10 px-2.5 py-0.5 text-xs font-bold text-[#2E7D32] border border-[#2E7D32]/20">
+                        <span className="text-xs font-bold text-[#2E7D32]">
                           {c.loyalty_points ?? 0} pts
                         </span>
                       </td>
@@ -124,10 +124,8 @@ export default function Loyalty({ customers = [], logs = [], onRefresh }: Loyalt
                         </td>
                         <td className="px-4 py-3">
                           <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
-                              isEarned
-                                ? 'bg-[#2E7D32]/10 text-[#2E7D32] border border-[#2E7D32]/20'
-                                : 'bg-amber-100 text-amber-800 border border-amber-200'
+                            className={`text-[10px] font-bold uppercase tracking-wider ${
+                              isEarned ? 'text-[#2E7D32]' : 'text-amber-800'
                             }`}
                           >
                             {log.type}
