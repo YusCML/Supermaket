@@ -12,6 +12,16 @@
 //
 // Signing in itself is done by Supabase Auth (Supabase's sign-in service).
 // After sign-in, the roles come from src/lib/roles.ts.
+
+// This is the Session type you saw in the Supabase library:
+// interface Session {
+//   access_token: string;    // ① the main token (wristband)
+//   refresh_token: string;   // ② used to get a new access token
+//   expires_in: number;      // how long ① lasts (seconds)
+//   expires_at?: number;     // when ① expires
+//   token_type: 'bearer';
+//   user: User;              // who you are (id, email, name from Google)
+// }
 import {
   createContext,
   useContext,
@@ -83,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // useEffect with an empty list [] runs once, after the provider first
   // appears on screen. The function it returns is the "clean-up", which React
   // runs when the provider is removed.
-  useEffect(() => {
+  useEffect(() => { //"After React has drawn the screen, run this function as a side effect. And here's when to run it again."
     // Set to false by the clean-up, so a late answer is ignored.
     let active = true;
 
@@ -96,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(({ data: { session } }) => {
         if (!active) return;
         setSession(session);
-        setUser(session?.user ?? null);
+        setUser(session?.user ?? null); //takes the login from the returning URL and saves it, so it survives a page refresh. Now user holds your Google account (id, email, name). loading becomes false, meaning "done checking."
       })
       .catch((err) => {
         console.error('Failed to restore session:', err);
@@ -179,11 +189,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // page knows to send them on into the app instead of leaving them there.
   // If starting the Google sign-in fails, the note is taken back.
   const signInWithGoogle = async () => {
-    rememberSignInRedirect();
+    rememberSignInRedirect(); //rememberSignInRedirect() writes a small note in sessionStorage (the browser's temporary storage for this tab): "this person is signing in." This matters because the browser is about to leave our site, and the note survives the trip.
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo: window.location.origin }, // Supabase sends you back to redirectTo, which is our home page (/). The returning URL carries proof from Supabase that you signed in.
     });
+    // Start Google OAuth via Supabase. Leaves the page; user comes back to
+    // window.location.origin with credentials. `error` = failure to start only.
+    //The Google side was set up once in the Supabase dashboard and Google Cloud Console (client ID, secret and allowed return addresses).
     if (error) {
       takeSignInRedirect();
       throw error;

@@ -95,6 +95,12 @@ export default function UserRoles({ users, staffRoles, rolesStatus, onRetryRoles
   // staffRoles (from the database) until Save succeeds, so the screen can
   // compare the two and mark the row "Unsaved".
   const [pending, setPending] = useState<Record<string, AppRole[]>>({});
+//   const roles: Record<string, AppRole[]> = {
+//   "user-123": ["admin", "editor"],
+//   "user-456": ["viewer"],
+//   "user-789": [],              // ← empty array is fine
+//   "org:acme": ["admin"],       // ← keys can be any string
+// };
   // The id of the person whose row is being saved right now (null = nobody).
   // That row's boxes and buttons are switched off until the save finishes.
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -105,7 +111,7 @@ export default function UserRoles({ users, staffRoles, rolesStatus, onRetryRoles
   const savedRolesOf = (userId: string): AppRole[] => [
     'customer',
     ...(staffRoles[userId] ?? []),
-  ];
+  ]; // e.g. ['customer'] or ['customer', 'cashier'] or ['customer', 'admin', 'cashier']
 
   // The rows to show: first the dropdown filter, then the search text.
   // The filter looks at SAVED roles, so ticking a box doesn't make a row
@@ -114,8 +120,8 @@ export default function UserRoles({ users, staffRoles, rolesStatus, onRetryRoles
   const query = search.toLowerCase().trim();
   const visibleUsers = users.filter((u) => {
     const roles = savedRolesOf(u.id);
-    if (roleFilter === 'cashier' && !roles.includes('cashier')) return false;
-    if (roleFilter === 'admin' && !roles.includes('admin')) return false;
+    if (roleFilter === 'cashier' && !roles.includes('cashier')) return false; // If the dropdown is set to "Cashier" and this user isn't a cashier → drop them.
+    if (roleFilter === 'admin' && !roles.includes('admin')) return false; //Same for "Admin".
     if (roleFilter === 'customer-only' && roles.length > 1) return false;
     if (!query) return true;
     return (

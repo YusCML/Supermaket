@@ -89,7 +89,7 @@ export async function getMyRoles(userId: string): Promise<AppRole[]> {
   if (cashierRow.data || mainRole === 'cashier' || isAdmin) roles.push('cashier');
   if (isAdmin) roles.push('admin');
   return roles;
-}
+} 
 
 // ── Coming back from Google sign-in ──────────────────────────────────────────
 // Google sends people back to the home page ("/"), not into the app (see

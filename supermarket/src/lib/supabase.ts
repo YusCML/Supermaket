@@ -11,6 +11,13 @@
 // row-level security knows who is asking.
 import { createClient } from '@supabase/supabase-js';
 
+// export const supabase = createClient(supabaseUrl, supabaseAnonKey);  // build the connection
+// createClient returns one object, supabase, with everything inside:
+// - supabase.auth handles login (Google, sessions, sign-out);
+// - supabase.from('table') reads and writes tables;
+// - supabase.rpc('fn') runs database functions;
+
+// - supabase.storage handles product photos.
 // The project's address and its public "anon" key come from environment
 // variables: settings kept in the .env / .env.local file instead of being
 // written into the code. Vite only hands variables whose
@@ -32,4 +39,4 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // can write them to src/types/supabase.ts), so TypeScript doesn't
 // know the shape of database rows. That's why api.ts uses `as Product[]` and
 // similar to state the shape itself.
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey); //It's the entry point to everything Supabase: auth, database queries, file storage, realtime subscriptions.

@@ -746,7 +746,7 @@ export default function Inventory({
 
       // Send the description if there is one now, or if there was one before
       // (so it can be cleared). Otherwise leave it out.
-      const descriptionChange =
+       const descriptionChange =
         values.description || editingProduct.description ? { description: values.description ?? null } : {};
 
       await onUpdateProduct(editingProduct.id, {

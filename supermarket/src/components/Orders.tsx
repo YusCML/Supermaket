@@ -48,7 +48,7 @@ const dateTime = new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeSty
 
 // "2026-11-01": the Philippine calendar date of a moment. Used by the
 // "Today" filter, so "today" means the store's today, not the computer's.
-const manilaDay = (moment: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(moment);
+const manilaDay = (moment: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(moment); //"YYYY-MM-DD"
 
 type Period = 'today' | '7' | '30' | 'all';
 const PERIOD_OPTIONS = [

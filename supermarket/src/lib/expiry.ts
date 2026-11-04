@@ -33,10 +33,21 @@ function phtToday() {
     month: '2-digit',
     day: '2-digit',
   }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  // formatToParts returns an array like:
+// js
+// [
+//   { type: 'year',  value: '2025' },
+//   { type: 'literal', value: '-' },
+//   { type: 'month', value: '01' },
+//   { type: 'literal', value: '-' },
+//   { type: 'day',   value: '15' }
+// ]
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value])); // maps each array into 
   // `- 1` because JavaScript counts months from 0 (January = 0).
-  return Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day));
+  return Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day)); // UTC timestamp @ midnight
 }
+// If today is January 15, 2025 in Manila, the function returns:
+// 1736899200000
 
 // Whole days from today until the expiry date ('2026-11-02'). Negative once
 // it has passed; 0 means it expires today.
@@ -47,7 +58,7 @@ function phtToday() {
 export function todayInManila(): string {
   return new Date(phtToday()).toISOString().slice(0, 10);
 }
-
+// returns "2026-11-02"
 export function daysUntilExpiry(expiryDate: string): number {
   // '2026-11-02' -> [2026, 11, 2]
   const [year, month, day] = expiryDate.split('-').map(Number);
