@@ -1,79 +1,89 @@
-import { Navigate, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+// RolePickerPage.tsx: the page at /app.
+//
+// App.tsx wraps it in <ProtectedRoute> WITHOUT a role, so any signed-in
+// person can open it (signed-out visitors are sent to /login first).
+// It reads the person's roles from AuthContext through useAuth() (the
+// sign-in data shared with the whole app, set up in main.tsx), looks up each
+// role's home page in ROLE_INFO (lib/roles.ts), and shows RolePickerDialog
+// when there's a choice to make:
+//   customer only -> no question, straight into the shop (/self-serve)
+//   cashier       -> Customer or Cashier
+//   admin         -> Customer, Cashier or Admin (getMyRoles gives admins the
+//                    cashier role too)
+import { Navigate, Link } from 'react-router-dom';
+import { ArrowLeft, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotify } from '../contexts/NotifyContext';
 import { ROLE_INFO } from '../lib/roles';
-import { roleIcon } from '../ui/roleIcons';
+import RolePickerDialog from '../components/RolePickerDialog';
+import LoadingPanel from '../components/LoadingPanel';
+import BrandLogo from '../components/BrandLogo';
+import { Button } from '../components/ui/button';
 
+// Where everyone lands right after logging in (/app).
+// People with one role go straight to it. People with several get the
+// "How would you like to continue?" pop-up over a plain branded background.
 export default function RolePickerPage() {
-  const { user, roleLoading, availableRoles, signOut } = useAuth();
-  const navigate = useNavigate();
+  const { roleLoading, availableRoles, signOut } = useAuth();
+  // For showing an error if signing out fails.
+  const { notify } = useNotify();
 
+  // Still looking up the roles. ProtectedRoute doesn't wait for roles on this
+  // page (it has no `role`), so we wait here. Until the roles arrive the list
+  // is empty, and we'd otherwise show a picker with no buttons in it.
   if (roleLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#F5F5F5] font-sans text-xs font-semibold text-[#333333]/60 antialiased">
-        Checking your access…
+      <div className="flex min-h-screen items-center justify-center bg-canvas p-4">
+        <LoadingPanel message="Checking your access…" />
       </div>
     );
   }
 
+  // Only one role (that's always 'customer', since everyone has it): nothing
+  // to ask, so go straight to that role's page (ROLE_INFO[...].home, e.g.
+  // '/self-serve'). <Navigate> redirects as soon as it's drawn, and `replace`
+  // keeps /app out of the history so Back doesn't bounce through it again.
   if (availableRoles.length === 1) {
     return <Navigate to={ROLE_INFO[availableRoles[0]].home} replace />;
   }
 
+  // Several roles: show the picker, always open (writing just `open` means
+  // open={true}). It can't be closed (dismissible={false}), only answered,
+  // so onOpenChange has nothing to do. Picking a role navigates to that
+  // role's page (see RolePickerDialog).
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F5F5F5] px-4 py-12 font-sans antialiased">
-      <div className="w-full max-w-md rounded-2xl border border-gray-200/80 bg-[#FFFFFF] p-8 shadow-xs">
-        <div className="flex flex-col items-center text-center">
-          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-[#F5F5F5]">
-            <img src="/sp%20logo.jpg" alt="SuperMarket Express Logo" className="h-8 w-auto object-contain" />
-          </div>
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-[#333333]">SuperMarket Express</h1>
-          <p className="mt-2 text-xs leading-relaxed text-[#333333]/70">
-            Signed in as <strong className="font-semibold text-[#333333]">{user?.email}</strong>.
-            <br />
-            How would you like to continue?
-          </p>
-        </div>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-canvas p-6">
+      {/* Background behind the pop-up */}
+      <BrandLogo size="lg" className="opacity-50" />
 
-        <div className="mt-6 space-y-3">
-          {availableRoles.map((role) => {
-            const Icon = roleIcon(role);
-            return (
-              <button
-                key={role}
-                type="button"
-                className="group flex w-full flex-col text-left rounded-xl border border-gray-200 bg-[#FFFFFF] p-4 shadow-2xs hover:border-[#2E7D32]/50 hover:bg-[#2E7D32]/5 transition-all cursor-pointer"
-                onClick={() => navigate(ROLE_INFO[role].home)}
-              >
-                <span className="flex items-center gap-2 text-sm font-bold text-[#333333] group-hover:text-[#2E7D32] transition-colors">
-                  <Icon className="size-4" />
-                  <span>{ROLE_INFO[role].label}</span>
-                </span>
-                <span className="mt-1 text-xs text-[#333333]/60 leading-normal">
-                  {ROLE_INFO[role].description}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-6 flex items-center justify-between gap-2">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1 text-xs font-semibold text-[#333333]/70 hover:text-[#2E7D32] transition-colors"
-          >
-            <ArrowLeft className="size-3.5" />
-            Back to homepage
-          </Link>
-          <button
-            type="button"
-            className="rounded-lg border border-gray-300 bg-[#FFFFFF] px-3 py-1.5 text-xs font-semibold text-[#333333] shadow-2xs hover:bg-[#F5F5F5] transition-colors cursor-pointer"
-            onClick={signOut}
-          >
-            Sign out
-          </button>
-        </div>
-      </div>
+      <RolePickerDialog
+        open
+        onOpenChange={() => {}}
+        dismissible={false}
+        footer={
+          // <>...</> is a "fragment": it groups the two items without adding
+          // an extra element around them. Signing out makes ProtectedRoute
+          // send the person to /login (the home page with the sign-in pop-up).
+          <>
+            <Link
+              to="/"
+              className="inline-flex items-center justify-center gap-1 text-sm font-semibold text-ink-muted transition-colors hover:text-brand-strong"
+            >
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              Back to homepage
+            </Link>
+            <Button variant="ghost" size="sm" className="hover:bg-danger/10 hover:text-danger-strong" onClick={() =>
+                signOut().catch((err) =>
+                  notify(err instanceof Error ? err.message : 'Could not sign out. Please try again.', 'error')
+                )
+              }
+            >
+              <LogOut aria-hidden="true" />
+              Sign out
+            </Button>
+          </>
+        }
+      />
     </div>
   );
 }
